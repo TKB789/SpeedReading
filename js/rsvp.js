@@ -8,10 +8,16 @@
   function pivotIndex(word) {
     var n = word.length;
     if (n <= 1) return 0;
-    if (n <= 5) return 1;
-    if (n <= 9) return 2;
-    if (n <= 13) return 3;
-    return 4;
+    var p;
+    if (n <= 5) p = 1;
+    else if (n <= 9) p = 2;
+    else if (n <= 13) p = 3;
+    else p = 4;
+    // Ensure no more than 9 letters trail the pivot, so the right side of the
+    // word never runs off the rail. If it would, shift the pivot rightward.
+    var maxTrailing = 9;
+    if (n - 1 - p > maxTrailing) p = n - 1 - maxTrailing;
+    return p;
   }
 
   function chunkLongWord(word, max) {
