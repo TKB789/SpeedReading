@@ -84,6 +84,8 @@ body.mode-rsvp .pane-toggle {
   border-radius: 999px; cursor: pointer;
 }
 .pane-toggle:hover { color: var(--fg); border-color: var(--fg-dim); }
+.pane-toggle.loading { opacity: 0.6; animation: panePulse 0.8s ease-in-out infinite; }
+@keyframes panePulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 
 /* Masthead — ruled like a manuscript page */
 .top {
@@ -251,8 +253,8 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
-.pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s; }
-.pg-word:hover { background: var(--rubric-soft); color: var(--rubric); }
+.pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s;
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
 .page-edge { flex: 0 0 30px; border: none; background: transparent; padding: 0;
   font-size: 1.6rem; color: var(--fg-dim); cursor: pointer;
