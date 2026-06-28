@@ -192,14 +192,16 @@
     return { page: this.current + 1, total: this.pages.length || 1 };
   };
 
-  // Wire taps once; delegate to find the tapped word's index.
+  // Wire taps once. The whole page area reports taps; the reader decides whether
+  // it arms the prompt (first tap) or picks a start word (during 'picking').
+  // onTap receives (wordIndexOrNull): a word index if a word was hit, else null.
   Paged.prototype.enableTaps = function () {
     var self = this;
     this.pageEl.addEventListener('click', function (e) {
       var t = e.target;
-      if (t && t.classList && t.classList.contains('pg-word')) {
-        self.onTap(parseInt(t.dataset.index, 10));
-      }
+      var idx = (t && t.classList && t.classList.contains('pg-word'))
+        ? parseInt(t.dataset.index, 10) : null;
+      self.onTap(idx);
     });
   };
 

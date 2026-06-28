@@ -73,7 +73,7 @@
     var pageEl = document.getElementById('page');
     if (pageEl) pageEl.innerHTML = '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">' +
       msg + '</p><p class="pg-para" style="text-indent:0;color:var(--fg-dim)">' +
-      'Open a book from the <a href="index.html" style="color:var(--rubric)">Library</a>.</p>';
+      'Open a book from the <a href="index.html?home" style="color:var(--rubric)">Library</a>.</p>';
   }
 
   function setup(b) {
@@ -82,6 +82,7 @@
     els.author.textContent = b.author || '';
     setTopChapter(0);
     document.title = b.title + ' — RSVP Reader';
+    Store.setLastBook(bookId, src);
 
     // Chapter dropdown
     b.chapters.forEach(function (c, i) {
@@ -250,30 +251,38 @@
     window._dismissTapPrompt = dismissPrompt;
   }
 
-  // Called when a word in the paged view is tapped.
+  // Called when the page area is tapped. idx = word index, or null if the tap
+  // landed between paragraphs / in a margin (still a valid "arm the area" tap).
   function handleWordTap(idx) {
     var prompt = document.getElementById('tapPrompt');
     var msg = document.getElementById('tapPromptMsg');
+
     if (tapState === 'picking') {
-      // Second-stage tap: commit the chosen start word.
+      // Second stage: only a real word commits the start point. A gap tap is
+      // ignored so you can't accidentally cancel by missing a word.
+      if (idx == null) return;
       engine.seek(idx);
       if (window._dismissTapPrompt) window._dismissTapPrompt();
       switchView('rsvp');
       paged.follow(idx);
       return;
     }
-    // First tap (read mode): arm the whole page + prompt. Do NOT pick a word yet.
+
+    // First tap anywhere in the page (word OR gap): arm the area + prompt.
+    // Never picks a word on this tap.
     if (currentView === 'read' && tapState === 'idle') {
       if (engine) engine.pause();
       tapState = 'prompt';
-      pendingPickIndex = null; // nothing chosen yet — "Set start word" enters picking
-      msg.textContent = 'Set a start word to speed-read, resume reading, or keep this view.';
+      pendingPickIndex = null;
+      msg.textContent = 'Set a start word to speed-read, expand to full reading, or resume.';
       document.getElementById('tpSetWord').hidden = false;
-      document.getElementById('tpExpand').hidden = true; // already in reading
+      document.getElementById('tpExpand').hidden = true; // already reading
       document.getElementById('page').classList.add('area-armed');
       prompt.hidden = false;
       return;
     }
+
+    // A tap while the prompt is showing dismisses it (resume).
     if (tapState === 'prompt') { if (window._dismissTapPrompt) window._dismissTapPrompt(); }
   }
 

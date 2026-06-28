@@ -1,6 +1,19 @@
 /* library.js — library view: load manifest + user books, search, add, data. */
 (function () {
   'use strict';
+
+  // If the user has a last-read book and didn't explicitly ask for the library
+  // (?home), jump straight back into it. The reader's "Library" link uses ?home.
+  var wantsHome = new URLSearchParams(window.location.search).has('home');
+  if (!wantsHome) {
+    var last = Store.getLastBook();
+    if (last && last.id) {
+      window.location.replace('reader.html?book=' + encodeURIComponent(last.id) +
+        '&src=' + (last.src || 'repo'));
+      return; // stop running the library; we're navigating away
+    }
+  }
+
   var grid = document.getElementById('grid');
   var emptyEl = document.getElementById('empty');
   var searchEl = document.getElementById('search');

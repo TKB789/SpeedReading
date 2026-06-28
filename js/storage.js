@@ -12,6 +12,7 @@
   var KEY_PROGRESS = PREFIX + 'progress:';   // + bookId
   var KEY_LIBRARY  = PREFIX + 'library';     // user-uploaded books index
   var KEY_BOOK     = PREFIX + 'book:';       // + bookId (full parsed book)
+  var KEY_LASTBOOK = PREFIX + 'lastbook';    // {id, src} of the most recent read
 
   function lsGet(k, fallback) {
     try { var v = localStorage.getItem(k); return v == null ? fallback : JSON.parse(v); }
@@ -51,6 +52,10 @@
       mode: mode || 'read', updated: Date.now() });
   }
   function clearProgress(bookId) { lsDel(KEY_PROGRESS + bookId); }
+
+  function setLastBook(id, src) { return lsSet(KEY_LASTBOOK, { id: id, src: src || 'repo' }); }
+  function getLastBook() { return lsGet(KEY_LASTBOOK, null); }
+  function clearLastBook() { lsDel(KEY_LASTBOOK); }
 
   // User-uploaded library: array of { id, title, author, wordCount }
   function getUserLibrary() { return lsGet(KEY_LIBRARY, []); }
@@ -101,6 +106,7 @@
     requestPersistence: requestPersistence, isPersisted: isPersisted,
     getSettings: getSettings, saveSettings: saveSettings,
     getProgress: getProgress, saveProgress: saveProgress, clearProgress: clearProgress,
+    setLastBook: setLastBook, getLastBook: getLastBook, clearLastBook: clearLastBook,
     getUserLibrary: getUserLibrary, getUserBook: getUserBook,
     saveUserBook: saveUserBook, deleteUserBook: deleteUserBook,
     exportAll: exportAll, importAll: importAll
