@@ -50,16 +50,25 @@
   // Paginate: lay words into the page element until it overflows height, record
   // page boundaries, repeat. Measures against the real element size.
   // Returns true if it paginated, false if the element had no height yet.
-  Paged.prototype.build = function (tokens) {
+  Paged.prototype._displayWordsCached = function () {
+    if (!this._wordsCache) this._wordsCache = this._displayWords();
+    return this._wordsCache;
+  };
+
+  Paged.prototype.build = function (tokens, force) {
     if (tokens) this.tokens = tokens;
-    this.words = this._displayWords();
-    this.pages = [];
     var el = this.pageEl;
     var maxH = el.clientHeight;
-    if (!maxH || maxH < 40) {
-      // Not laid out yet (hidden or zero-height). Caller should retry.
-      return false;
+    var maxW = el.clientWidth;
+    if (!maxH || maxH < 40) return false; // not laid out yet; caller retries
+    // Reuse existing pagination if dimensions are unchanged (big speed win).
+    if (!force && this.pages.length && this._builtH === maxH && this._builtW === maxW) {
+      this.renderPage(this.current);
+      return true;
     }
+    this.words = this._displayWordsCached();
+    this.pages = [];
+    this._builtH = maxH; this._builtW = maxW;
     // Build paragraph blocks, then fill pages by appending blocks/words.
     el.innerHTML = '';
     var pageStartWord = 0;
