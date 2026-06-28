@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=1782685252">
+<link rel="stylesheet" href="css/style.css?v=1782686264">
 </head>
 <body class="reader-page">
 <header class="top reader-top">
@@ -31,6 +31,7 @@
     <div class="menu-label">Mode</div>
     <button class="menu-item" id="mRead" role="menuitemradio" aria-checked="true">Read (paged)</button>
     <button class="menu-item" id="mRsvp" role="menuitemradio" aria-checked="false">Speed-read</button>
+    <button class="menu-item" id="mPane" role="menuitem" hidden>Hide reading pane</button>
     <div class="menu-sep"></div>
     <div class="menu-label">Chapter</div>
     <select id="chapterSel" class="menu-select" aria-label="Jump to chapter"></select>
@@ -55,6 +56,7 @@
 
   <!-- RSVP reader -->
   <section id="rsvpView" hidden aria-label="Speed reader">
+  <button id="paneToggle" class="pane-toggle" aria-label="Hide or show reading pane">▲ hide text</button>
   <div class="rail" id="rail" aria-live="off">
     <div class="guide"></div>
     <div class="idle" id="railIdle">Press play to begin reading.</div>
@@ -106,10 +108,10 @@
   </div>
 </main>
 
-<script src="js/parser.js?v=1782685252"></script>
-<script src="js/storage.js?v=1782685252"></script>
-<script src="js/rsvp.js?v=1782685252"></script>
-<script src="js/paged.js?v=1782685252"></script>
-<script src="js/reader.js?v=1782685252"></script>
+<script src="js/parser.js?v=1782686264"></script>
+<script src="js/storage.js?v=1782686264"></script>
+<script src="js/rsvp.js?v=1782686264"></script>
+<script src="js/paged.js?v=1782686264"></script>
+<script src="js/reader.js?v=1782686264"></script>
 </body>
 </html>
