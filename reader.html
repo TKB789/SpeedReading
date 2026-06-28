@@ -11,27 +11,35 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="reader-page">
-<header class="top">
-  <a class="brand" href="index.html">← Library</a>
+<header class="top reader-top">
+  <div class="reader-id">
+    <span class="ri-title" id="bookTitle">Loading…</span>
+    <span class="ri-sep">·</span>
+    <span class="ri-chapter" id="chapterName"></span>
+    <span class="ri-author" id="bookAuthor"></span>
+  </div>
   <div class="top-actions">
-    <button id="themeBtn" class="icon-btn ghost" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    <button id="settingsBtn" class="icon-btn ghost" aria-label="Settings" aria-haspopup="true">⚙</button>
   </div>
 </header>
 
+<!-- Settings menu -->
+<div class="menu-backdrop" id="settingsMenu" hidden>
+  <div class="menu" role="menu">
+    <a class="menu-item" href="index.html" role="menuitem">← Library</a>
+    <div class="menu-sep"></div>
+    <div class="menu-label">Mode</div>
+    <button class="menu-item" id="mRead" role="menuitemradio" aria-checked="true">Read (paged)</button>
+    <button class="menu-item" id="mRsvp" role="menuitemradio" aria-checked="false">Speed-read</button>
+    <div class="menu-sep"></div>
+    <div class="menu-label">Chapter</div>
+    <select id="chapterSel" class="menu-select" aria-label="Jump to chapter"></select>
+    <div class="menu-sep"></div>
+    <button class="menu-item" id="mTheme" role="menuitem">Toggle light / dark</button>
+  </div>
+</div>
+
 <main class="wrap">
-  <div class="reader-head">
-    <div class="rh-title">
-      <h1 id="bookTitle">Loading…</h1>
-      <span class="author" id="bookAuthor"></span>
-    </div>
-    <select id="chapterSel" class="chapter-sel" aria-label="Jump to chapter"></select>
-  </div>
-
-  <div class="viewtoggle" role="tablist" aria-label="Reading mode">
-    <button id="tabRead" class="seg" role="tab" aria-selected="true">Read</button>
-    <button id="tabRsvp" class="seg" role="tab" aria-selected="false">Speed-read</button>
-  </div>
-
   <!-- Paged reader -->
   <section id="pagedView" aria-label="Paged reader">
     <div class="page-frame">
