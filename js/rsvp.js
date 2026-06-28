@@ -33,7 +33,10 @@
 
   function tokenize(chapters, opts) {
     opts = opts || {};
-    var maxLen = opts.maxWordLength || 13;
+    // Show whole words as single flashes — never split a word across two frames
+    // (that was more confusing than a slightly wide word). A very high cap means
+    // chunkLongWord is effectively a passthrough.
+    var maxLen = opts.maxWordLength || 999;
     var tokens = [];
     for (var c = 0; c < chapters.length; c++) {
       var paras = chapters[c].paras;
