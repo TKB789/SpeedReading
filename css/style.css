@@ -202,23 +202,33 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
   background: var(--bg-3); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius); }
 
 /* View toggle (Read / Speed-read) */
-.viewtoggle { display: flex; gap: 0; margin: 10px 0 8px; border: 1px solid var(--line);
-  border-radius: var(--radius); overflow: hidden; width: fit-content; }
-.seg { border: none; border-radius: 0; background: var(--bg-2); color: var(--fg-dim);
-  padding: 7px 16px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; }
-.seg[aria-selected="true"] { background: var(--rubric); color: #f5ecd8; }
-.seg:hover { background: var(--fg); color: var(--bg); }
-.seg[aria-selected="true"]:hover { background: var(--rubric); color: #f5ecd8; }
+/* Reader top bar: title · chapter · author, all on one line */
+.reader-top { gap: 12px; }
+.reader-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.ri-title { font-family: var(--font-body); font-weight: 600; font-size: 1rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+.ri-sep { color: var(--rubric); flex: 0 0 auto; }
+.ri-chapter { font-family: var(--font-body); font-size: 0.92rem; color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ri-author { font-family: var(--font-body); font-style: italic; font-size: 0.82rem;
+  color: var(--fg-dim); white-space: nowrap; flex: 0 0 auto; margin-left: 4px; }
+@media (max-width: 600px) { .ri-author { display: none; } .ri-title { max-width: 34vw; } }
 
-/* Compact reader header */
-.reader-head { display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-.rh-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.reader-head h1 { font-family: var(--font-body); font-weight: 600; font-size: 1.05rem; margin: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
-.reader-head .author { color: var(--fg-dim); font-size: 0.82rem; font-style: italic;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chapter-sel { max-width: 40vw; }
+/* Settings menu (anchored dropdown via full-screen backdrop) */
+.menu-backdrop { position: fixed; inset: 0; z-index: 60; background: transparent; }
+.menu { position: absolute; top: 60px; right: 14px; width: 230px;
+  background: var(--bg); border: 1px solid var(--fg); border-radius: var(--radius);
+  box-shadow: 0 10px 36px #0000005a; padding: 8px; }
+.menu-item { display: block; width: 100%; text-align: left; background: transparent;
+  border: none; border-radius: var(--radius); padding: 10px 12px; color: var(--fg);
+  font-family: var(--font-ui); font-size: 0.86rem; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.menu-item:hover { background: var(--bg-3); color: var(--fg); }
+.menu-item[aria-checked="true"] { color: var(--rubric); font-weight: 600; }
+.menu-item[aria-checked="true"]::after { content: " ✓"; }
+.menu-label { font-family: var(--font-ui); font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--fg-dim); padding: 6px 12px 2px; }
+.menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+.menu-select { width: calc(100% - 8px); margin: 2px 4px 4px; }
 
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -234,7 +244,6 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s; }
 .pg-word:hover { background: var(--rubric-soft); color: var(--rubric); }
 .pg-word.active { background: var(--rubric); color: #f5ecd8; }
-/* Subtle chevron arrows, no box */
 .page-edge { flex: 0 0 30px; border: none; background: transparent; padding: 0;
   font-size: 1.6rem; color: var(--fg-dim); cursor: pointer;
   display: flex; align-items: center; justify-content: center; transition: color .12s; }
