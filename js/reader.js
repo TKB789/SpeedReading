@@ -116,8 +116,10 @@
       }
     });
     paged.enableTaps();
-    // Build after layout so clientHeight is real.
-    requestAnimationFrame(function () { paged.build(tokens); });
+    // Build after layout settles (fonts, real height). Retries until ready.
+    paged.buildWhenReady(tokens, function () {
+      paged.goToIndex(engine ? engine.index : 0);
+    });
 
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
     document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
@@ -150,8 +152,7 @@
       tabRead.setAttribute('aria-selected', 'true');
       tabRsvp.setAttribute('aria-selected', 'false');
       // Page may not have been built while hidden; ensure it fits now.
-      requestAnimationFrame(function () {
-        if (!paged.pages.length || paged.pages.length === 1) paged.build(tokens);
+      paged.buildWhenReady(tokens, function () {
         paged.highlight(engine ? engine.index : 0);
       });
     } else {

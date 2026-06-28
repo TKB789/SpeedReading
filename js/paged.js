@@ -49,15 +49,16 @@
 
   // Paginate: lay words into the page element until it overflows height, record
   // page boundaries, repeat. Measures against the real element size.
+  // Returns true if it paginated, false if the element had no height yet.
   Paged.prototype.build = function (tokens) {
-    this.tokens = tokens || [];
+    if (tokens) this.tokens = tokens;
     this.words = this._displayWords();
     this.pages = [];
     var el = this.pageEl;
     var maxH = el.clientHeight;
-    if (!maxH) { // not laid out yet; defer
-      this.pages = [{ start: 0, end: this.words.length }];
-      return;
+    if (!maxH || maxH < 40) {
+      // Not laid out yet (hidden or zero-height). Caller should retry.
+      return false;
     }
     // Build paragraph blocks, then fill pages by appending blocks/words.
     el.innerHTML = '';
@@ -109,6 +110,18 @@
     el.innerHTML = '';
     if (this.current >= this.pages.length) this.current = this.pages.length - 1;
     this.renderPage(this.current);
+    return true;
+  };
+
+  // Build with retry: poll until the element has real height (handles fonts
+  // still loading or the view being momentarily hidden). cb runs once built.
+  Paged.prototype.buildWhenReady = function (tokens, cb) {
+    var self = this;
+    var tries = 0;
+    (function attempt() {
+      if (self.build(tokens)) { if (cb) cb(); return; }
+      if (tries++ < 40) setTimeout(attempt, 50); // up to ~2s
+    })();
   };
 
   Paged.prototype.renderPage = function (n) {
