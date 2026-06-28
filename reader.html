@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RSVP Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">← Library</a>
+  <div class="top-actions">
+    <button id="themeBtn" class="icon-btn ghost" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="reader-head">
+    <div>
+      <h1 id="bookTitle">Loading…</h1>
+      <div class="author" id="bookAuthor"></div>
+    </div>
+    <div class="row">
+      <label for="chapterSel">Chapter</label>
+      <select id="chapterSel" aria-label="Jump to chapter"></select>
+    </div>
+  </div>
+
+  <div class="rail" id="rail" aria-live="off">
+    <div class="guide"></div>
+    <div class="idle" id="railIdle">Press play to begin reading.</div>
+    <div class="word" id="word" hidden></div>
+  </div>
+
+  <div class="controls">
+    <div class="scrub">
+      <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Position in book">
+    </div>
+    <div class="progress" id="progress">word 0 of 0</div>
+    <div class="readout">
+      <span id="pct">0%</span>
+      <span id="timeleft">time left —:—</span>
+    </div>
+
+    <div class="transport">
+      <button id="back30" title="Back 30 seconds">⟲ 30s</button>
+      <button id="back1" title="Back one word">‹</button>
+      <button id="play" class="primary" style="min-width:120px">Play</button>
+      <button id="fwd1" title="Forward one word">›</button>
+      <button id="fwd30" title="Forward 30 seconds">30s ⟳</button>
+    </div>
+
+    <div class="row" style="justify-content:center">
+      <label for="wpm">Speed</label>
+      <input id="wpm" type="range" min="150" max="900" step="10" value="400" style="flex:1; accent-color:var(--rubric)" aria-label="Words per minute">
+      <span class="wpm-val" id="wpmVal" tabindex="0" role="button" title="Click to type an exact speed">400 wpm</span>
+      <input id="wpmInput" type="text" inputmode="numeric" class="wpm-edit" hidden aria-label="Type words per minute">
+    </div>
+
+    <div class="row" style="justify-content:center">
+      <label for="pauseScale">Pauses</label>
+      <input id="pauseScale" type="range" min="0" max="2" step="0.1" value="1" style="flex:1; accent-color:var(--rubric)" aria-label="Pause scale">
+      <span class="wpm-val" id="pauseVal">normal</span>
+    </div>
+  </div>
+</main>
+
+<script src="js/parser.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/rsvp.js"></script>
+<script src="js/reader.js"></script>
+</body>
+</html>

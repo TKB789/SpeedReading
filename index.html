@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RSVP Reader — Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">RSVP<span class="dot">·</span>Reader</a>
+  <div class="top-actions">
+    <button id="addBtn" class="primary">Add book</button>
+    <button id="dataBtn" class="ghost">Data</button>
+    <button id="themeBtn" class="icon-btn ghost" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="lib-head">
+    <h1>Library</h1>
+    <p>Browse your books, then speed-read with the one-word rail. All free, public-domain texts.</p>
+  </div>
+
+  <div class="search"><input id="search" type="search" placeholder="Search title or author…" aria-label="Search books"></div>
+
+  <div id="grid" class="grid" aria-live="polite"></div>
+  <div id="empty" class="empty" hidden>No books match. Try a different search, or add one.</div>
+</main>
+
+<!-- Add-book drawer -->
+<div class="drawer-backdrop" id="addDrawer" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+  <div class="drawer">
+    <h2 id="addTitle">Add a book</h2>
+    <p>Upload a plain-text (.txt) file from Project Gutenberg. The file is parsed and stored in this browser only.</p>
+    <div class="field">
+      <label for="file">Gutenberg .txt file</label>
+      <input id="file" type="file" accept=".txt,text/plain">
+    </div>
+    <div class="field">
+      <label for="tTitle">Title (optional — read from file if blank)</label>
+      <input id="tTitle" type="text" placeholder="e.g. Frankenstein">
+    </div>
+    <div class="field">
+      <label for="tAuthor">Author (optional)</label>
+      <input id="tAuthor" type="text" placeholder="e.g. Mary Shelley">
+    </div>
+    <div class="note">Only add books you have confirmed are public domain. Everything on Project Gutenberg
+      marked public-domain is fine in the U.S.; check your local law if elsewhere.</div>
+    <div id="addError" class="error" hidden></div>
+    <div class="drawer-actions">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="addConfirm" class="primary">Add to library</button>
+    </div>
+  </div>
+</div>
+
+<!-- Data drawer -->
+<div class="drawer-backdrop" id="dataDrawer" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+  <div class="drawer">
+    <h2 id="dataTitle">Your data</h2>
+    <p id="persistState">Checking storage…</p>
+    <div class="note">Bookmarks, progress, settings, and uploaded books live in this browser's storage.
+      A deliberate “clear site data” erases them. Export keeps a backup and moves data to another device.</div>
+    <div class="drawer-actions" style="justify-content:flex-start">
+      <button id="exportBtn">Export backup</button>
+      <button id="importBtn" class="ghost">Import backup</button>
+      <input id="importFile" type="file" accept=".json,application/json" hidden>
+    </div>
+    <div id="dataMsg" class="error" hidden></div>
+    <div class="drawer-actions">
+      <button class="ghost" data-close>Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/parser.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/library.js"></script>
+</body>
+</html>
