@@ -1,7 +1,7 @@
 /* reader.js — wires the RSVP engine to the rail, controls, and persistence. */
 (function () {
   'use strict';
-  var params = new URLSearchParams(location.search);
+  var params = new URLSearchParams(window.location.search);
   var bookId = params.get('book');
   var src = params.get('src') || 'repo';
 
@@ -53,6 +53,7 @@
   Store.requestPersistence();
 
   var engine = null, tokens = null, book = null, saveTimer = null;
+  var pendingPickIndex = null;
 
   function loadBook() {
     if (src === 'user') {
@@ -67,7 +68,12 @@
   }
   function fail(msg) {
     els.title.textContent = 'Unavailable';
-    els.idle.textContent = msg;
+    if (els.idle) els.idle.textContent = msg;
+    // Also show it in the paged panel, which is the visible view by default.
+    var pageEl = document.getElementById('page');
+    if (pageEl) pageEl.innerHTML = '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">' +
+      msg + '</p><p class="pg-para" style="text-indent:0;color:var(--fg-dim)">' +
+      'Open a book from the <a href="index.html" style="color:var(--rubric)">Library</a>.</p>';
   }
 
   function setup(b) {
@@ -118,26 +124,24 @@
   }
 
   var paged = null, currentView = 'read';
+  var tapState = 'idle'; // 'idle' | 'prompt' | 'picking'
+
   function setupPaged() {
     var pageEl = document.getElementById('page');
     paged = new Paged(pageEl, {
       onWordTap: function (idx) {
-        // Tap a word → seek RSVP there and switch to speed-read.
-        engine.seek(idx);
-        switchView('rsvp');
+        handleWordTap(idx);
       },
       onPageChange: function (info) {
         document.getElementById('pageNum').textContent =
           'page ' + info.page + ' of ' + info.total;
-        // Reflect the chapter of the first word on this page in the top bar.
-        if (currentView === 'read' && paged && paged.words && paged.pages[paged.current]) {
+        if (paged && paged.words && paged.pages[paged.current]) {
           var fw = paged.words[paged.pages[paged.current].startWord];
           if (fw) setTopChapter(fw.chapter);
         }
       }
     });
     paged.enableTaps();
-    // Build after layout settles (fonts, real height). Retries until ready.
     paged.buildWhenReady(tokens, function () {
       paged.goToIndex(engine ? engine.index : 0);
     });
@@ -147,7 +151,9 @@
     document.getElementById('mRead').addEventListener('click', function () { switchView('read'); closeMenu(); });
     document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp'); closeMenu(); });
 
-    // Re-paginate on resize/orientation; keep the reader near the same spot.
+    setupTapPrompt();
+    document.body.classList.add('mode-read');
+
     var rzTimer = null;
     window.addEventListener('resize', function () {
       clearTimeout(rzTimer);
@@ -167,6 +173,8 @@
     var rsvpView = document.getElementById('rsvpView');
     var mRead = document.getElementById('mRead');
     var mRsvp = document.getElementById('mRsvp');
+    document.body.classList.toggle('mode-rsvp', view === 'rsvp');
+    document.body.classList.toggle('mode-read', view === 'read');
     if (view === 'read') {
       if (engine) engine.pause();
       rsvpView.hidden = true; readView.hidden = false;
@@ -176,10 +184,94 @@
         paged.highlight(engine ? engine.index : 0);
       });
     } else {
-      readView.hidden = true; rsvpView.hidden = false;
+      // Speed-read: rail visible AND the page panel follows along above it.
+      rsvpView.hidden = false; readView.hidden = false;
       mRead.setAttribute('aria-checked', 'false');
       mRsvp.setAttribute('aria-checked', 'true');
+      paged.buildWhenReady(tokens, function () {
+        paged.follow(engine ? engine.index : 0);
+      });
     }
+  }
+
+  /* ---------- Tap prompt state machine ---------- */
+  function setupTapPrompt() {
+    var prompt = document.getElementById('tapPrompt');
+    var msg = document.getElementById('tapPromptMsg');
+    var pageEl = document.getElementById('page');
+
+    // Tapping the RSVP rail pauses and prompts (guards accidental taps).
+    els.rail.addEventListener('click', function () {
+      if (tapState !== 'idle') { dismissPrompt(); return; }
+      engine.pause();
+      tapState = 'prompt';
+      msg.textContent = 'Paused. Set a new start word, expand to reading, or resume.';
+      document.getElementById('tpSetWord').hidden = false;
+      document.getElementById('tpExpand').hidden = false;
+      prompt.hidden = false;
+      els.rail.classList.add('area-armed');
+    });
+
+    document.getElementById('tpCancel').addEventListener('click', dismissPrompt);
+    document.getElementById('tpExpand').addEventListener('click', function () {
+      dismissPrompt(); switchView('read');
+    });
+    document.getElementById('tpSetWord').addEventListener('click', function () {
+      if (pendingPickIndex != null) {
+        // A word was already tapped (read mode) — start RSVP from it.
+        engine.seek(pendingPickIndex);
+        var pick = pendingPickIndex; pendingPickIndex = null;
+        dismissPrompt();
+        switchView('rsvp');
+        paged.follow(pick);
+        return;
+      }
+      // Otherwise enter picking mode: next word tap sets the start.
+      tapState = 'picking';
+      prompt.hidden = false;
+      msg.textContent = 'Tap any word in the text above to start from there.';
+      document.getElementById('tpSetWord').hidden = true;
+      document.getElementById('tpExpand').hidden = true;
+      document.getElementById('pagedView').hidden = false;
+      pageEl.classList.add('area-armed');
+    });
+
+    function dismissPrompt() {
+      prompt.hidden = true;
+      tapState = 'idle';
+      pendingPickIndex = null;
+      els.rail.classList.remove('area-armed');
+      pageEl.classList.remove('area-armed');
+    }
+    window._dismissTapPrompt = dismissPrompt;
+  }
+
+  // Called when a word in the paged view is tapped.
+  function handleWordTap(idx) {
+    var prompt = document.getElementById('tapPrompt');
+    var msg = document.getElementById('tapPromptMsg');
+    if (tapState === 'picking') {
+      // Commit the chosen start word.
+      engine.seek(idx);
+      if (window._dismissTapPrompt) window._dismissTapPrompt();
+      switchView('rsvp');
+      paged.follow(idx);
+      return;
+    }
+    // First tap in read mode: highlight the page and prompt (no jump yet).
+    if (currentView === 'read' && tapState === 'idle') {
+      paged.activeIndex = idx;            // remember which word was under the tap
+      tapState = 'prompt';
+      msg.textContent = 'Start speed-reading from here, or keep reading?';
+      document.getElementById('tpSetWord').hidden = false;
+      document.getElementById('tpExpand').hidden = true; // already in reading
+      document.getElementById('page').classList.add('area-armed');
+      prompt.hidden = false;
+      // "Set start word" should use THIS tapped word, so stash it.
+      pendingPickIndex = idx;
+      return;
+    }
+    if (tapState === 'prompt') { if (window._dismissTapPrompt) window._dismissTapPrompt(); }
   }
 
   // Render a token with the pivot pinned to rail centre.
@@ -203,6 +295,10 @@
     var shiftY = els.word.getBoundingClientRect().height / 2;
     els.word.style.transform = 'translate(' + (-shiftX) + 'px, ' + (-shiftY) + 'px)';
     if (snap) updateProgressLabel(snap);
+    // Keep the paged panel in lockstep with the speed-read word.
+    if (currentView === 'rsvp' && paged && paged.pages && paged.pages.length) {
+      paged.follow(snap ? snap.index : engine.index);
+    }
   }
 
   function chapterName(i) {
