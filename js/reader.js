@@ -228,6 +228,7 @@
 
   // Arm: pause, outline the active box(es), show the prompt for the current view.
   function arm() {
+    if (tapState === 'armed') return;   // already armed; don't reset selection
     if (engine) engine.pause();
     tapState = 'armed';
     selectedIndex = null;
@@ -257,15 +258,13 @@
       'Start speed-reading from \u201C' + (target ? target.textContent.trim() : 'here') + '\u201D, or cancel.';
   }
 
-  // Set start word → begin speed-read at the selected word.
+  // Set start word → read the highlighted word straight from the DOM and start
+  // speed-reading from it immediately. Independent of selectedIndex so nothing
+  // can desync it: if a word is visibly highlighted, this commits it, period.
   function commitStartWord() {
-    var pick = selectedIndex;
-    // Fallback: if state was cleared but a word is visibly picked, use that.
-    if (pick == null) {
-      var pk = document.querySelector('#page .pg-word.picked');
-      if (pk) pick = parseInt(pk.dataset.index, 10);
-    }
-    if (pick == null) {
+    var pk = document.querySelector('#page .pg-word.picked');
+    var pick = pk ? parseInt(pk.dataset.index, 10) : selectedIndex;
+    if (pick == null || isNaN(pick)) {
       document.getElementById('tapPromptMsg').textContent =
         'Tap a word in the text first, then press Set start word.';
       return;
