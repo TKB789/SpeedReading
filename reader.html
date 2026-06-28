@@ -30,6 +30,26 @@
     </div>
   </div>
 
+  <div class="viewtoggle" role="tablist" aria-label="Reading mode">
+    <button id="tabRead" class="seg" role="tab" aria-selected="true">Read</button>
+    <button id="tabRsvp" class="seg" role="tab" aria-selected="false">Speed-read</button>
+  </div>
+
+  <!-- Paged reader -->
+  <section id="pagedView" aria-label="Paged reader">
+    <div class="page-frame">
+      <button class="page-edge left" id="pagePrev" aria-label="Previous page">‹</button>
+      <div class="page" id="page"></div>
+      <button class="page-edge right" id="pageNext" aria-label="Next page">›</button>
+    </div>
+    <div class="page-meta">
+      <span id="pageNum">page — of —</span>
+      <span class="hint">tap a word to speed-read from there</span>
+    </div>
+  </section>
+
+  <!-- RSVP reader -->
+  <section id="rsvpView" hidden aria-label="Speed reader">
   <div class="rail" id="rail" aria-live="off">
     <div class="guide"></div>
     <div class="idle" id="railIdle">Press play to begin reading.</div>
@@ -67,11 +87,13 @@
       <span class="wpm-val" id="pauseVal">normal</span>
     </div>
   </div>
+  </section>
 </main>
 
 <script src="js/parser.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/rsvp.js"></script>
+<script src="js/paged.js"></script>
 <script src="js/reader.js"></script>
 </body>
 </html>
