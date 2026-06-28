@@ -73,6 +73,17 @@ body.reader-page #rsvpView { overflow-y: auto; }
 body.mode-rsvp #pagedView { flex: 0 0 auto; }
 body.mode-rsvp .page-frame { height: 30vh; min-height: 160px; flex: 0 0 auto; }
 body.mode-rsvp .page-meta { display: none; }
+/* Collapsed reading pane: hide the page strip; rail takes the room. */
+body.mode-rsvp.pane-collapsed #pagedView { display: none; }
+/* Inline pane toggle, only shown in speed-read mode. */
+.pane-toggle { display: none; }
+body.mode-rsvp .pane-toggle {
+  display: block; margin: 6px auto 2px; padding: 4px 14px;
+  font-family: var(--font-body); font-size: 0.85rem; font-style: italic;
+  color: var(--fg-dim); background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; cursor: pointer;
+}
+.pane-toggle:hover { color: var(--fg); border-color: var(--fg-dim); }
 
 /* Masthead — ruled like a manuscript page */
 .top {
