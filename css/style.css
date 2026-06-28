@@ -257,9 +257,6 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 }
 /* Tap prompt + armed reading-area highlight */
 .area-armed { outline: 2px solid var(--rubric); outline-offset: -2px; }
-/* While the prompt is open, shrink the page area so it ends above the prompt
-   and every visible word stays tappable. */
-body.prompt-open.mode-read .page-frame { max-height: calc(100dvh - 340px); }
 .tap-prompt { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
   display: flex; justify-content: center; padding: 16px; pointer-events: none; }
 .tap-prompt[hidden] { display: none; }
