@@ -156,6 +156,7 @@
     document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp'); closeMenu(); });
 
     setupTapPrompt();
+    setupPaneToggle();
 
     var rzTimer = null;
     window.addEventListener('resize', function () {
@@ -178,6 +179,8 @@
     document.body.classList.toggle('mode-read', view === 'read');
     document.getElementById('mRead').setAttribute('aria-checked', String(view === 'read'));
     document.getElementById('mRsvp').setAttribute('aria-checked', String(view === 'rsvp'));
+    var mPane = document.getElementById('mPane');
+    if (mPane) mPane.hidden = (view !== 'rsvp');
     if (engine) engine.pause();
     if (view === 'read') {
       rsvpView.hidden = true; readView.hidden = false;
@@ -187,6 +190,38 @@
       rsvpView.hidden = false; readView.hidden = false;
       paged.buildWhenReady(tokens, function () { paged.follow(engine ? engine.index : 0); });
     }
+  }
+
+  /* ---------- Reading-pane collapse (speed-read mode only) ---------- */
+  var paneCollapsed = false;
+  function setupPaneToggle() {
+    try {
+      var s = Store.getSettings();
+      paneCollapsed = !!s.paneCollapsed;
+    } catch (e) { paneCollapsed = false; }
+    applyPaneState();
+    document.getElementById('paneToggle').addEventListener('click', togglePane);
+    var mPane = document.getElementById('mPane');
+    if (mPane) mPane.addEventListener('click', function () { togglePane(); closeMenu(); });
+  }
+
+  function togglePane() {
+    paneCollapsed = !paneCollapsed;
+    applyPaneState();
+    try {
+      var s = Store.getSettings(); s.paneCollapsed = paneCollapsed; Store.saveSettings(s);
+    } catch (e) {}
+    if (!paneCollapsed && currentView === 'rsvp' && paged) {
+      paged.buildWhenReady(tokens, function () { paged.follow(engine ? engine.index : 0); });
+    }
+  }
+
+  function applyPaneState() {
+    document.body.classList.toggle('pane-collapsed', paneCollapsed);
+    var btn = document.getElementById('paneToggle');
+    if (btn) btn.textContent = paneCollapsed ? '\u25BC show text' : '\u25B2 hide text';
+    var mPane = document.getElementById('mPane');
+    if (mPane) mPane.textContent = paneCollapsed ? 'Show reading pane' : 'Hide reading pane';
   }
 
   /* ---------- Tap interaction (identical for both reading areas) ----------
