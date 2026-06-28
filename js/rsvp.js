@@ -41,7 +41,14 @@
     for (var c = 0; c < chapters.length; c++) {
       var paras = chapters[c].paras;
       for (var p = 0; p < paras.length; p++) {
-        var words = paras[p].split(/\s+/).filter(Boolean);
+        // Split on whitespace, and also break around em dashes (—), en dashes (–),
+        // and double hyphens (--), which join two words with no space. Hyphens in
+        // compound words (rabbit-hole) are NOT split. The dash stays attached to
+        // the left word so it reads as "industrious—" then "painstaking".
+        var raw = paras[p]
+          .replace(/(\u2014|\u2013|--)/g, '$1 ')  // ensure a space AFTER the dash
+          .replace(/\s*(\u2014|\u2013|--)/g, '$1'); // remove any space BEFORE it
+        var words = raw.split(/\s+/).filter(Boolean);
         for (var w = 0; w < words.length; w++) {
           var pieces = chunkLongWord(words[w], maxLen);
           for (var k = 0; k < pieces.length; k++) {
