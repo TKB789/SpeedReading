@@ -215,6 +215,7 @@
     document.getElementById('tpExpand').addEventListener('click', function () {
       clearArmed(); clearSelectedWord();
       document.getElementById('tapPrompt').hidden = true;
+      document.body.classList.remove('prompt-open');
       tapState = 'idle';
       switchView('read');
     });
@@ -247,7 +248,16 @@
     }
     setBtn.hidden = false;
     document.getElementById('tpCancel').textContent = 'Cancel';
+    document.body.classList.add('prompt-open');
     prompt.hidden = false;
+    // Re-fit the page above the prompt so every visible word is tappable.
+    if (mode !== 'rsvp' && paged) {
+      requestAnimationFrame(function () {
+        var anchor = (selectedIndex != null) ? selectedIndex : (engine ? engine.index : 0);
+        paged.build(tokens, true);
+        paged.goToIndex(anchor);
+      });
+    }
   }
 
   // "Set start word": act on the selected word now. If nothing selected yet,
@@ -261,6 +271,7 @@
     var pick = selectedIndex;
     clearArmed(); clearSelectedWord();
     document.getElementById('tapPrompt').hidden = true;
+    document.body.classList.remove('prompt-open');
     tapState = 'idle';
     engine.seek(pick);
     switchView('rsvp');
@@ -282,8 +293,18 @@
   function cancelPrompt() {
     document.getElementById('tapPrompt').hidden = true;
     clearArmed(); clearSelectedWord();
+    document.body.classList.remove('prompt-open');
     tapState = 'idle';
-    if (currentView === 'rsvp') switchView('rsvp');
+    // Re-fit the page back to full height.
+    if (currentView === 'read' && paged) {
+      requestAnimationFrame(function () {
+        var anchor = engine ? engine.index : 0;
+        paged.build(tokens, true);
+        paged.goToIndex(anchor);
+      });
+    } else if (currentView === 'rsvp') {
+      switchView('rsvp');
+    }
   }
 
   // Tap on a word in the paged area. idx = word index, or null for a gap tap.
