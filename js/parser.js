@@ -9,9 +9,28 @@
 (function (root) {
   'use strict';
 
-  // Lines like "CHAPTER I.", "CHAPTER 12", "Chapter IV", a bare roman numeral,
-  // or a bare number on their own line.
-  var CHAPTER_RE = /^\s*(chapter\s+[ivxlcdm\d]+\.?.*|[ivxlcdm]+\.|\d+\.?)\s*$/i;
+  // A genuine chapter/section heading. Gutenberg hard-wraps prose, so lines
+  // frequently begin with "I", "I.", or a number — we must NOT treat those as
+  // headings. Require an explicit keyword (CHAPTER/LETTER/PART/BOOK/etc.), OR a
+  // standalone multi-character roman numeral line, OR "Chapter N"-style. A bare
+  // single letter or a bare arabic number is rejected to avoid false splits.
+  var HEADING_KEYWORD = /^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*[ivxlcdm\d]*\.?\s*$/i;
+  var ROMAN_ONLY = /^\s*[IVXLCDM]{1,7}\.?\s*$/; // uppercase only, on its own line
+  function isHeading(line) {
+    var t = line.trim();
+    if (!t) return false;
+    if (HEADING_KEYWORD.test(t)) return true;
+    // Standalone roman numeral, but reject single ambiguous letters (I, V, X, L,
+    // C, D, M) which are usually the pronoun "I" or stray caps. Require ≥2 chars,
+    // OR exactly "I." / "V." etc. with a trailing period AND short line.
+    if (ROMAN_ONLY.test(t)) {
+      var core = t.replace(/\./g, '');
+      if (core.length >= 2) return true;          // "II", "IV", "XII" → heading
+      if (/\.$/.test(t) && core === 'I') return false; // "I." alone is too risky
+      return false;
+    }
+    return false;
+  }
 
   function stripGutenberg(raw) {
     var t = String(raw).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -62,16 +81,28 @@
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
-      if (CHAPTER_RE.test(line)) {
+      if (isHeading(line)) {
         flushChapter();
         var title = line.trim().replace(/\s+/g, ' ');
-        // A short non-heading line right after is treated as the chapter title.
+        // If the heading is a bare numeral, the next short line MAY be the
+        // chapter's title (e.g. "CHAPTER IV" / "The Departure"). Only fold it in
+        // when it looks like a title: short, and not the start of flowing prose
+        // (no trailing comma/lowercase-run, not ending mid-sentence).
         var j = i + 1;
         while (j < lines.length && lines[j].trim() === '') j++;
-        if (j < lines.length && lines[j].trim() && !CHAPTER_RE.test(lines[j]) &&
-            lines[j].trim().length < 70) {
-          title += ' — ' + lines[j].trim();
-          i = j;
+        var bareNumeralHeading = /^(chapter|letter|part|book|volume|stave|canto)\s*[ivxlcdm\d]*\.?$|^[ivxlcdm]+\.?$/i.test(title.trim());
+        if (bareNumeralHeading && j < lines.length) {
+          var cand = lines[j].trim();
+          var looksLikeTitle = cand && cand.length < 50 && !isHeading(lines[j]) &&
+            !/[,;]$/.test(cand) &&            // not a wrapped prose line
+            !/[a-z]$/.test(cand) === false && // (kept permissive)
+            !/["'\u201c]/.test(cand.charAt(0)) && // not opening dialogue
+            /^[A-Z]/.test(cand);              // titles start capitalised
+          // Heuristic: a real title is usually Title Case or all-caps and short.
+          if (looksLikeTitle && cand.split(' ').length <= 7) {
+            title += ' — ' + cand;
+            i = j;
+          }
         }
         current = { title: title, paras: [] };
         continue;
@@ -79,7 +110,6 @@
       if (line.trim() === '') {
         flushPara();
       } else {
-        // Start an implicit first chapter if text begins before any heading.
         if (!current) current = { title: 'Beginning', paras: [] };
         paraBuf.push(line.trim());
       }

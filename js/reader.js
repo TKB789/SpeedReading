@@ -8,6 +8,7 @@
   var els = {
     title: document.getElementById('bookTitle'),
     author: document.getElementById('bookAuthor'),
+    chapterName: document.getElementById('chapterName'),
     chapterSel: document.getElementById('chapterSel'),
     rail: document.getElementById('rail'),
     idle: document.getElementById('railIdle'),
@@ -22,17 +23,31 @@
     pauseVal: document.getElementById('pauseVal'),
     pct: document.getElementById('pct'),
     timeleft: document.getElementById('timeleft'),
-    themeBtn: document.getElementById('themeBtn')
+    settingsBtn: document.getElementById('settingsBtn'),
+    settingsMenu: document.getElementById('settingsMenu')
   };
 
-  // Theme
+  function setTheme(t) {
+    settings = Store.getSettings();
+    settings.theme = t; Store.saveSettings(settings);
+    document.documentElement.setAttribute('data-theme', t);
+  }
+
+  // Theme + settings menu
   var settings = Store.getSettings();
   document.documentElement.setAttribute('data-theme', settings.theme);
-  els.themeBtn.addEventListener('click', function () {
-    settings = Store.getSettings();
-    settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
-    Store.saveSettings(settings);
-    document.documentElement.setAttribute('data-theme', settings.theme);
+
+  function openMenu() { els.settingsMenu.hidden = false; }
+  function closeMenu() { els.settingsMenu.hidden = true; }
+  els.settingsBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    els.settingsMenu.hidden ? openMenu() : closeMenu();
+  });
+  els.settingsMenu.addEventListener('click', function (e) {
+    if (e.target === els.settingsMenu) closeMenu(); // tap backdrop
+  });
+  document.getElementById('mTheme').addEventListener('click', function () {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   });
 
   Store.requestPersistence();
@@ -59,6 +74,7 @@
     book = b;
     els.title.textContent = b.title;
     els.author.textContent = b.author || '';
+    setTopChapter(0);
     document.title = b.title + ' — RSVP Reader';
 
     // Chapter dropdown
@@ -113,6 +129,11 @@
       onPageChange: function (info) {
         document.getElementById('pageNum').textContent =
           'page ' + info.page + ' of ' + info.total;
+        // Reflect the chapter of the first word on this page in the top bar.
+        if (currentView === 'read' && paged && paged.words && paged.pages[paged.current]) {
+          var fw = paged.words[paged.pages[paged.current].startWord];
+          if (fw) setTopChapter(fw.chapter);
+        }
       }
     });
     paged.enableTaps();
@@ -123,8 +144,8 @@
 
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
     document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
-    document.getElementById('tabRead').addEventListener('click', function () { switchView('read'); });
-    document.getElementById('tabRsvp').addEventListener('click', function () { switchView('rsvp'); });
+    document.getElementById('mRead').addEventListener('click', function () { switchView('read'); closeMenu(); });
+    document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp'); closeMenu(); });
 
     // Re-paginate on resize/orientation; keep the reader near the same spot.
     var rzTimer = null;
@@ -144,21 +165,20 @@
     currentView = view;
     var readView = document.getElementById('pagedView');
     var rsvpView = document.getElementById('rsvpView');
-    var tabRead = document.getElementById('tabRead');
-    var tabRsvp = document.getElementById('tabRsvp');
+    var mRead = document.getElementById('mRead');
+    var mRsvp = document.getElementById('mRsvp');
     if (view === 'read') {
       if (engine) engine.pause();
       rsvpView.hidden = true; readView.hidden = false;
-      tabRead.setAttribute('aria-selected', 'true');
-      tabRsvp.setAttribute('aria-selected', 'false');
-      // Page may not have been built while hidden; ensure it fits now.
+      mRead.setAttribute('aria-checked', 'true');
+      mRsvp.setAttribute('aria-checked', 'false');
       paged.buildWhenReady(tokens, function () {
         paged.highlight(engine ? engine.index : 0);
       });
     } else {
       readView.hidden = true; rsvpView.hidden = false;
-      tabRead.setAttribute('aria-selected', 'false');
-      tabRsvp.setAttribute('aria-selected', 'true');
+      mRead.setAttribute('aria-checked', 'false');
+      mRsvp.setAttribute('aria-checked', 'true');
     }
   }
 
@@ -206,12 +226,17 @@
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
+  function setTopChapter(i) {
+    if (els.chapterName) els.chapterName.textContent = chapterName(i);
+  }
+
   function updateProgressLabel(snap) {
     els.progress.innerHTML = 'word ' + (snap.index + 1).toLocaleString() +
       ' of ' + snap.total.toLocaleString() +
       ' · <span class="chapter-now">' + chapterName(snap.chapter) + '</span>';
     els.scrub.value = String(snap.index);
     if (els.chapterSel.value !== String(snap.chapter)) els.chapterSel.value = String(snap.chapter);
+    setTopChapter(snap.chapter);
     var pct = snap.total ? Math.round(snap.index / snap.total * 100) : 0;
     els.pct.textContent = pct + '%';
     if (engine) els.timeleft.textContent = 'time left ' + fmtTime(engine.timeLeftMs());
