@@ -242,6 +242,7 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .pg-para:first-child { text-indent: 0; }
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s; }
 .pg-word:hover { background: var(--rubric-soft); color: var(--rubric); }
+.pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
 .page-edge { flex: 0 0 30px; border: none; background: transparent; padding: 0;
   font-size: 1.6rem; color: var(--fg-dim); cursor: pointer;
   display: flex; align-items: center; justify-content: center; transition: color .12s; }
