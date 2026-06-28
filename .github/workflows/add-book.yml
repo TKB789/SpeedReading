@@ -1,0 +1,78 @@
+# .github/workflows/add-book.yml
+#
+# Adds a public-domain book to the library by Project Gutenberg ID, with no
+# terminal needed. Run it from the repo's Actions tab → "Add book" →
+# "Run workflow", fill in the ID, and it fetches the text, builds the JSON,
+# updates the manifest, and commits the result. GitHub Pages redeploys on push.
+#
+# IMPORTANT: only add books that are public domain. Everything on Project
+# Gutenberg marked public-domain is fine in the U.S.; check local law elsewhere.
+#
+# Action versions (checked June 2026): checkout@v5 and setup-node@v5 run on the
+# Node 24 runtime. The older @v4 line runs on Node 20, which GitHub deprecated —
+# forced off by June 2026 and removed September 2026 — so v5 avoids the warnings.
+# node-version 22 below is the LTS the build script itself runs on; bump it when
+# a newer LTS lands. If a workflow ever fails on a "Node 20 deprecated" notice,
+# the fix is to raise these @v5 pins to the current major.
+
+name: Add book
+
+on:
+  workflow_dispatch:
+    inputs:
+      gutenberg_id:
+        description: "Project Gutenberg numeric ID (from the book's URL, e.g. 1342)"
+        required: true
+        type: string
+      slug:
+        description: "Short id for the file (optional, e.g. 'pride'). Defaults to pg<ID>."
+        required: false
+        type: string
+      title:
+        description: "Title (optional — read from the file if blank)"
+        required: false
+        type: string
+      author:
+        description: "Author (optional — read from the file if blank)"
+        required: false
+        type: string
+
+permissions:
+  contents: write   # needed so the workflow can commit the new book back
+
+jobs:
+  add-book:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Build the book
+        run: |
+          ID="${{ github.event.inputs.gutenberg_id }}"
+          SLUG="${{ github.event.inputs.slug }}"
+          TITLE="${{ github.event.inputs.title }}"
+          AUTHOR="${{ github.event.inputs.author }}"
+          # Pass only the arguments that were provided.
+          ARGS=(--gutenberg "$ID")
+          [ -n "$SLUG" ]   && ARGS+=("$SLUG")
+          [ -n "$TITLE" ]  && ARGS+=("$TITLE")
+          [ -n "$AUTHOR" ] && ARGS+=("$AUTHOR")
+          node build-book.js "${ARGS[@]}"
+
+      - name: Commit and push the new book
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add books/
+          if git diff --cached --quiet; then
+            echo "No changes — the book may already exist or the fetch returned nothing."
+            exit 0
+          fi
+          git commit -m "Add Gutenberg #${{ github.event.inputs.gutenberg_id }} to library"
+          git push
