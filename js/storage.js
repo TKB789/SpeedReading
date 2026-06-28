@@ -46,8 +46,9 @@
 
   // Progress per book: { index, chapter, updated }
   function getProgress(bookId) { return lsGet(KEY_PROGRESS + bookId, null); }
-  function saveProgress(bookId, index, chapter) {
-    return lsSet(KEY_PROGRESS + bookId, { index: index, chapter: chapter, updated: Date.now() });
+  function saveProgress(bookId, index, chapter, mode) {
+    return lsSet(KEY_PROGRESS + bookId, { index: index, chapter: chapter,
+      mode: mode || 'read', updated: Date.now() });
   }
   function clearProgress(bookId) { lsDel(KEY_PROGRESS + bookId); }
 

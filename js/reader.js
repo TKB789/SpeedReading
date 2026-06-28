@@ -110,10 +110,12 @@
     // Build the paged reader from the same token stream.
     setupPaged();
 
-    // Resume
+    // Resume position and mode
     var prog = Store.getProgress(bookId);
+    var resumeMode = 'read';
     if (prog && prog.index > 0 && prog.index < tokens.length) {
       engine.index = prog.index;
+      resumeMode = prog.mode || 'read';
       renderWord(engine.current(), engine.snapshot());
       onState(engine.snapshot());
     } else {
@@ -121,6 +123,8 @@
     }
     if (paged) paged.goToIndex(engine.index);
     wireControls();
+    // Apply saved mode (defaults to read). switchView positions the page too.
+    switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
   }
 
   var paged = null, currentView = 'read';
@@ -251,24 +255,23 @@
     var prompt = document.getElementById('tapPrompt');
     var msg = document.getElementById('tapPromptMsg');
     if (tapState === 'picking') {
-      // Commit the chosen start word.
+      // Second-stage tap: commit the chosen start word.
       engine.seek(idx);
       if (window._dismissTapPrompt) window._dismissTapPrompt();
       switchView('rsvp');
       paged.follow(idx);
       return;
     }
-    // First tap in read mode: highlight the page and prompt (no jump yet).
+    // First tap (read mode): arm the whole page + prompt. Do NOT pick a word yet.
     if (currentView === 'read' && tapState === 'idle') {
-      paged.activeIndex = idx;            // remember which word was under the tap
+      if (engine) engine.pause();
       tapState = 'prompt';
-      msg.textContent = 'Start speed-reading from here, or keep reading?';
+      pendingPickIndex = null; // nothing chosen yet — "Set start word" enters picking
+      msg.textContent = 'Set a start word to speed-read, resume reading, or keep this view.';
       document.getElementById('tpSetWord').hidden = false;
       document.getElementById('tpExpand').hidden = true; // already in reading
       document.getElementById('page').classList.add('area-armed');
       prompt.hidden = false;
-      // "Set start word" should use THIS tapped word, so stash it.
-      pendingPickIndex = idx;
       return;
     }
     if (tapState === 'prompt') { if (window._dismissTapPrompt) window._dismissTapPrompt(); }
@@ -344,7 +347,7 @@
     // Debounced progress save
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      Store.saveProgress(bookId, snap.index, snap.chapter);
+      Store.saveProgress(bookId, snap.index, snap.chapter, currentView);
     }, 400);
   }
 
@@ -405,8 +408,13 @@
       else if (e.code === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? engine.skipTime(-30000) : engine.step(-1); }
     });
 
-    window.addEventListener('beforeunload', function () {
-      if (engine) Store.saveProgress(bookId, engine.index, engine.snapshot().chapter);
+    function saveNow() {
+      if (engine) Store.saveProgress(bookId, engine.index, engine.snapshot().chapter, currentView);
+    }
+    window.addEventListener('beforeunload', saveNow);
+    window.addEventListener('pagehide', saveNow);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') saveNow();
     });
   }
 

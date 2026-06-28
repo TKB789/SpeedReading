@@ -143,7 +143,6 @@
       span.className = 'pg-word';
       span.textContent = w.text + ' ';
       span.dataset.index = w.index;
-      if (this.activeIndex != null && w.index === this.activeIndex) span.className += ' active';
       curPara.appendChild(span);
     }
     this.onPageChange(this.pageInfo());
@@ -155,27 +154,13 @@
     this.goToIndex(idx);
   };
 
-  // Follow the RSVP word: update the active highlight in place, and only
-  // re-render/turn the page when the word moves onto a different page. Cheap
-  // enough to call on every RSVP tick.
+  // Follow the RSVP word: turn the page when the word crosses onto a new page,
+  // but do NOT paint an active-word highlight (the moving paragraph is enough).
   Paged.prototype.follow = function (idx) {
     this.activeIndex = idx;
     var pageOf = this._pageOfIndex(idx);
     if (pageOf !== this.current) {
-      this.renderPage(pageOf); // crossing a page boundary
-    } else {
-      // Same page: move the .active class to the word containing this index.
-      var el = this.pageEl;
-      var prev = el.querySelector('.pg-word.active');
-      if (prev) prev.classList.remove('active');
-      // Words carry their first token index; find the last span whose index <= idx.
-      var spans = el.querySelectorAll('.pg-word');
-      var target = null;
-      for (var k = 0; k < spans.length; k++) {
-        if (parseInt(spans[k].dataset.index, 10) <= idx) target = spans[k];
-        else break;
-      }
-      if (target) target.classList.add('active');
+      this.renderPage(pageOf);
     }
   };
 
