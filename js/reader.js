@@ -212,7 +212,15 @@
       var s = Store.getSettings(); s.paneCollapsed = paneCollapsed; Store.saveSettings(s);
     } catch (e) {}
     if (!paneCollapsed && currentView === 'rsvp' && paged) {
-      paged.buildWhenReady(tokens, function () { paged.follow(engine ? engine.index : 0); });
+      // Reopening re-fits the strip, which can take a moment — show feedback.
+      var btn = document.getElementById('paneToggle');
+      if (btn) btn.textContent = '\u2026 loading';
+      requestAnimationFrame(function () {
+        paged.buildWhenReady(tokens, function () {
+          paged.follow(engine ? engine.index : 0);
+          applyPaneState(); // restore the button label
+        });
+      });
     }
   }
 
@@ -257,13 +265,18 @@
   // A tap inside the paged area. idx = word index, or null for a gap tap.
   function handlePageTap(idx) {
     if (tapState === 'idle') { arm(); return; }   // first tap just arms
+    if (tapState === 'picking') {                  // picking: this tap commits
+      if (idx == null) return;
+      startAt(idx);
+      return;
+    }
     if (idx == null) return;                       // gap tap while armed: ignore
     selectWord(idx);                               // move highlight, stay armed
   }
 
   // Arm: pause, outline the active box(es), show the prompt for the current view.
   function arm() {
-    if (tapState === 'armed') return;   // already armed; don't reset selection
+    if (tapState === 'armed' || tapState === 'picking') return;
     if (engine) engine.pause();
     tapState = 'armed';
     selectedIndex = null;
@@ -286,28 +299,32 @@
     selectedIndex = idx;
     var prev = document.querySelector('#page .pg-word.picked');
     if (prev) prev.classList.remove('picked');
-    // Highlight the exact span carrying this index.
     var target = document.querySelector('#page .pg-word[data-index="' + idx + '"]');
     if (target) target.classList.add('picked');
     document.getElementById('tapPromptMsg').textContent =
       'Start speed-reading from \u201C' + (target ? target.textContent.trim() : 'here') + '\u201D, or cancel.';
   }
 
-  // Set start word → read the highlighted word straight from the DOM and start
-  // speed-reading from it immediately. Independent of selectedIndex so nothing
-  // can desync it: if a word is visibly highlighted, this commits it, period.
+  // "Set start word": if a word is already selected, start there immediately.
+  // Otherwise fall back to picking mode (next word tap starts).
   function commitStartWord() {
     var pk = document.querySelector('#page .pg-word.picked');
     var pick = pk ? parseInt(pk.dataset.index, 10) : selectedIndex;
-    if (pick == null || isNaN(pick)) {
-      document.getElementById('tapPromptMsg').textContent =
-        'Tap a word in the text first, then press Set start word.';
-      return;
-    }
+    if (pick != null && !isNaN(pick)) { startAt(pick); return; }
+    // No word chosen yet → enter picking mode.
+    tapState = 'picking';
+    document.getElementById('tpSetWord').hidden = true;
+    document.getElementById('tpExpand').hidden = true;
+    document.getElementById('tapPromptMsg').textContent =
+      'Now tap any word in the text to start speed-reading there.';
+  }
+
+  // Start speed-reading at a given word index.
+  function startAt(idx) {
     disarm();
-    engine.seek(pick);
+    engine.seek(idx);
     switchView('rsvp');
-    paged.follow(pick);
+    paged.follow(idx);
   }
 
   function openPageRead() { disarm(); switchView('read'); }
@@ -387,9 +404,11 @@
   }
   function fmtTime(ms) {
     if (!isFinite(ms) || ms < 0) ms = 0;
-    var s = Math.round(ms / 1000);
-    var m = Math.floor(s / 60); s = s % 60;
-    return m + ':' + (s < 10 ? '0' : '') + s;
+    var totalMin = Math.round(ms / 60000);
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
   }
 
   function setTopChapter(i) {
