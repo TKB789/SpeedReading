@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=1782648507">
 </head>
 <body class="reader-page">
 <header class="top reader-top">
@@ -93,12 +93,23 @@
     </div>
   </div>
   </section>
+  <!-- Tap prompt overlay (shown when tapping a reading area) -->
+  <div class="tap-prompt" id="tapPrompt" hidden>
+    <div class="tap-prompt-inner">
+      <p id="tapPromptMsg">Tap a word to set your start point, or keep reading.</p>
+      <div class="tap-prompt-actions">
+        <button id="tpSetWord" class="primary">Set start word</button>
+        <button id="tpExpand">Expand to reading</button>
+        <button id="tpCancel" class="ghost">Resume</button>
+      </div>
+    </div>
+  </div>
 </main>
 
-<script src="js/parser.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/rsvp.js"></script>
-<script src="js/paged.js"></script>
-<script src="js/reader.js"></script>
+<script src="js/parser.js?v=1782648507"></script>
+<script src="js/storage.js?v=1782648507"></script>
+<script src="js/rsvp.js?v=1782648507"></script>
+<script src="js/paged.js?v=1782648507"></script>
+<script src="js/reader.js?v=1782648507"></script>
 </body>
 </html>
