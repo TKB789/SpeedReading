@@ -85,6 +85,9 @@
 
     els.scrub.max = String(Math.max(0, tokens.length - 1));
 
+    // Build the paged reader from the same token stream.
+    setupPaged();
+
     // Resume
     var prog = Store.getProgress(bookId);
     if (prog && prog.index > 0 && prog.index < tokens.length) {
@@ -94,7 +97,68 @@
     } else {
       updateProgressLabel(engine.snapshot());
     }
+    if (paged) paged.goToIndex(engine.index);
     wireControls();
+  }
+
+  var paged = null, currentView = 'read';
+  function setupPaged() {
+    var pageEl = document.getElementById('page');
+    paged = new Paged(pageEl, {
+      onWordTap: function (idx) {
+        // Tap a word → seek RSVP there and switch to speed-read.
+        engine.seek(idx);
+        switchView('rsvp');
+      },
+      onPageChange: function (info) {
+        document.getElementById('pageNum').textContent =
+          'page ' + info.page + ' of ' + info.total;
+      }
+    });
+    paged.enableTaps();
+    // Build after layout so clientHeight is real.
+    requestAnimationFrame(function () { paged.build(tokens); });
+
+    document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
+    document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
+    document.getElementById('tabRead').addEventListener('click', function () { switchView('read'); });
+    document.getElementById('tabRsvp').addEventListener('click', function () { switchView('rsvp'); });
+
+    // Re-paginate on resize/orientation; keep the reader near the same spot.
+    var rzTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(rzTimer);
+      rzTimer = setTimeout(function () {
+        if (currentView === 'read') {
+          var anchor = engine ? engine.index : 0;
+          paged.build(tokens);
+          paged.goToIndex(anchor);
+        }
+      }, 200);
+    });
+  }
+
+  function switchView(view) {
+    currentView = view;
+    var readView = document.getElementById('pagedView');
+    var rsvpView = document.getElementById('rsvpView');
+    var tabRead = document.getElementById('tabRead');
+    var tabRsvp = document.getElementById('tabRsvp');
+    if (view === 'read') {
+      if (engine) engine.pause();
+      rsvpView.hidden = true; readView.hidden = false;
+      tabRead.setAttribute('aria-selected', 'true');
+      tabRsvp.setAttribute('aria-selected', 'false');
+      // Page may not have been built while hidden; ensure it fits now.
+      requestAnimationFrame(function () {
+        if (!paged.pages.length || paged.pages.length === 1) paged.build(tokens);
+        paged.highlight(engine ? engine.index : 0);
+      });
+    } else {
+      readView.hidden = true; rsvpView.hidden = false;
+      tabRead.setAttribute('aria-selected', 'false');
+      tabRsvp.setAttribute('aria-selected', 'true');
+    }
   }
 
   // Render a token with the pivot pinned to rail centre.
@@ -172,6 +236,7 @@
     els.scrub.addEventListener('input', function () { engine.seek(parseInt(els.scrub.value, 10)); });
     els.chapterSel.addEventListener('change', function () {
       engine.seekChapter(parseInt(els.chapterSel.value, 10));
+      if (paged && currentView === 'read') paged.goToIndex(engine.index);
     });
 
     function setWpm(v) {
