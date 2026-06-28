@@ -207,20 +207,24 @@
 
   function togglePane() {
     paneCollapsed = !paneCollapsed;
-    applyPaneState();
+    var btn = document.getElementById('paneToggle');
+    document.body.classList.toggle('pane-collapsed', paneCollapsed);
     try {
       var s = Store.getSettings(); s.paneCollapsed = paneCollapsed; Store.saveSettings(s);
     } catch (e) {}
     if (!paneCollapsed && currentView === 'rsvp' && paged) {
-      // Reopening re-fits the strip, which can take a moment — show feedback.
-      var btn = document.getElementById('paneToggle');
-      if (btn) btn.textContent = '\u2026 loading';
+      // Reopening re-fits the strip, which can take a moment — show feedback
+      // and block repeat taps until it's done.
+      if (btn) { btn.textContent = '\u2026 loading'; btn.disabled = true; btn.classList.add('loading'); }
       requestAnimationFrame(function () {
         paged.buildWhenReady(tokens, function () {
           paged.follow(engine ? engine.index : 0);
-          applyPaneState(); // restore the button label
+          if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+          applyPaneState();
         });
       });
+    } else {
+      applyPaneState();
     }
   }
 
