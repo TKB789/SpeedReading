@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="reader-page">
 <header class="top">
   <a class="brand" href="index.html">← Library</a>
   <div class="top-actions">
@@ -20,14 +20,11 @@
 
 <main class="wrap">
   <div class="reader-head">
-    <div>
+    <div class="rh-title">
       <h1 id="bookTitle">Loading…</h1>
-      <div class="author" id="bookAuthor"></div>
+      <span class="author" id="bookAuthor"></span>
     </div>
-    <div class="row">
-      <label for="chapterSel">Chapter</label>
-      <select id="chapterSel" aria-label="Jump to chapter"></select>
-    </div>
+    <select id="chapterSel" class="chapter-sel" aria-label="Jump to chapter"></select>
   </div>
 
   <div class="viewtoggle" role="tablist" aria-label="Reading mode">
@@ -44,7 +41,7 @@
     </div>
     <div class="page-meta">
       <span id="pageNum">page — of —</span>
-      <span class="hint">tap a word to speed-read from there</span>
+      <span class="hint">tap a word to speed-read</span>
     </div>
   </section>
 
