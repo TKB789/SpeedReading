@@ -2,14 +2,17 @@
 /*
  * build-book.js — add a public-domain book to the repo library.
  *
- * Two modes:
- *   From a local file:
- *     node build-book.js <input.txt> <id> "<Title>" "<Author>"
+ * Three modes:
+ *   Search the Gutenberg catalogue by title/author (Gutendex API):
+ *     node build-book.js --search "frankenstein shelley"
+ *     node build-book.js --search "frankenstein shelley" --build   (build top hit)
  *   From a Project Gutenberg ID (downloads the official plain text):
  *     node build-book.js --gutenberg <numericId> [id] ["Title"] ["Author"]
+ *   From a local file:
+ *     node build-book.js <input.txt> <id> "<Title>" "<Author>"
  *
  * Examples:
- *   node build-book.js --gutenberg 11
+ *   node build-book.js --search "pride and prejudice"
  *   node build-book.js --gutenberg 1342 pride "Pride and Prejudice" "Jane Austen"
  *   node build-book.js mybook.txt mybook "My Book" "Some Author"
  *
@@ -36,6 +39,24 @@ function fetchText(url) {
       res.on('data', function (d) { data += d; });
       res.on('end', function () { resolve(data); });
     }).on('error', reject);
+  });
+}
+
+// Query Gutendex (free Gutenberg metadata API) for public-domain matches.
+// Returns an array of { id, title, author, downloads }.
+function searchGutendex(query) {
+  var url = 'https://gutendex.com/books?copyright=false&search=' +
+    encodeURIComponent(query);
+  return fetchText(url).then(function (body) {
+    var data = JSON.parse(body);
+    return (data.results || []).map(function (b) {
+      return {
+        id: b.id,
+        title: b.title,
+        author: (b.authors && b.authors[0] && b.authors[0].name) || 'Unknown',
+        downloads: b.download_count || 0
+      };
+    });
   });
 }
 
@@ -76,7 +97,36 @@ function writeBook(book, coverFile) {
 
 async function main() {
   var argv = process.argv.slice(2);
-  if (argv[0] === '--gutenberg') {
+  if (argv[0] === '--search') {
+    // node build-book.js --search "frankenstein shelley" [--build] [slug]
+    var buildTop = argv.indexOf('--build') !== -1;
+    var terms = argv.slice(1).filter(function (a) { return a !== '--build'; });
+    // A trailing single token after --build with no spaces can be a slug; but to
+    // keep it simple, treat everything before any --build as the query.
+    var query = terms.join(' ').trim();
+    if (!query) { console.error('Usage: node build-book.js --search "<title or author>" [--build]'); process.exit(1); }
+    console.log('Searching Gutenberg for "' + query + '" …');
+    var results = await searchGutendex(query);
+    if (!results.length) { console.log('No public-domain matches found.'); return; }
+    console.log('\nMatches (most downloaded first):');
+    results.slice(0, 10).forEach(function (r, i) {
+      console.log('  ' + (i + 1) + '. [ID ' + r.id + '] ' + r.title + ' — ' + r.author +
+        '  (' + r.downloads.toLocaleString() + ' downloads)');
+    });
+    if (buildTop) {
+      var top = results[0];
+      console.log('\nBuilding top match: [ID ' + top.id + '] ' + top.title + ' …');
+      var rawT = await getGutenbergText(top.id);
+      var bookT = P.parse(rawT, { title: top.title, author: top.author });
+      bookT.id = 'pg' + top.id;
+      bookT.title = top.title; bookT.author = top.author;
+      bookT.source = 'Project Gutenberg #' + top.id + ' — public domain';
+      writeBook(bookT);
+    } else {
+      console.log('\nTo add one, run:  node build-book.js --gutenberg <ID>');
+      console.log('Or re-run this search with --build to build the top match.');
+    }
+  } else if (argv[0] === '--gutenberg') {
     var gid = argv[1];
     if (!gid) { console.error('Usage: node build-book.js --gutenberg <id> [id] ["Title"] ["Author"]'); process.exit(1); }
     var id = argv[2] || ('pg' + gid);
