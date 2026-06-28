@@ -64,6 +64,11 @@ body {
 }
 a { color: inherit; }
 .wrap { max-width: var(--maxw); margin: 0 auto; padding: 28px 22px 90px; }
+/* Reader page: full-height column so the paged view fills the screen. */
+body.reader-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: column;
+  padding: 14px 18px 14px; overflow: hidden; }
+body.reader-page #rsvpView { overflow-y: auto; }
 
 /* Masthead — ruled like a manuscript page */
 .top {
@@ -197,44 +202,49 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
   background: var(--bg-3); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius); }
 
 /* View toggle (Read / Speed-read) */
-.viewtoggle { display: flex; gap: 0; margin: 16px 0 4px; border: 1px solid var(--line);
+.viewtoggle { display: flex; gap: 0; margin: 10px 0 8px; border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; width: fit-content; }
 .seg { border: none; border-radius: 0; background: var(--bg-2); color: var(--fg-dim);
-  padding: 9px 18px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.76rem; }
+  padding: 7px 16px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; }
 .seg[aria-selected="true"] { background: var(--rubric); color: #f5ecd8; }
 .seg:hover { background: var(--fg); color: var(--bg); }
 .seg[aria-selected="true"]:hover { background: var(--rubric); color: #f5ecd8; }
 
-/* Paged reader */
-#pagedView { margin: 14px 0; }
-.page-frame { position: relative; display: flex; align-items: stretch; gap: 8px;
-  height: 62vh; min-height: 360px; }
+/* Compact reader header */
+.reader-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.rh-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.reader-head h1 { font-family: var(--font-body); font-weight: 600; font-size: 1.05rem; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
+.reader-head .author { color: var(--fg-dim); font-size: 0.82rem; font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chapter-sel { max-width: 40vw; }
+
+/* Paged reader fills the viewport below the header (no page scroll) */
+#pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
+  flex: 1; min-height: 0; }
 .page {
   flex: 1; height: 100%; overflow: hidden;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 30px 30px; box-shadow: inset 0 0 0 6px var(--bg-2), inset 0 0 0 7px var(--line);
-  font-size: 1.18rem; line-height: 1.7;
+  padding: 22px 24px; font-size: 1.16rem; line-height: 1.66;
 }
-.page-edge {
-  flex: 0 0 44px; height: 100%; border: 1px solid var(--line); background: var(--bg-2);
-  font-size: 1.4rem; color: var(--fg-dim); border-radius: var(--radius); cursor: pointer;
-}
-.pg-para { margin: 0 0 0.9em; text-indent: 1.4em; }
+.pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s; }
 .pg-word:hover { background: var(--rubric-soft); color: var(--rubric); }
 .pg-word.active { background: var(--rubric); color: #f5ecd8; }
-.page-edge {
-  flex: 0 0 44px; border: 1px solid var(--line); background: var(--bg-2);
-  font-size: 1.4rem; color: var(--fg-dim); border-radius: var(--radius); cursor: pointer;
-}
-.page-edge:hover { background: var(--fg); color: var(--bg); }
+/* Subtle chevron arrows, no box */
+.page-edge { flex: 0 0 30px; border: none; background: transparent; padding: 0;
+  font-size: 1.6rem; color: var(--fg-dim); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: color .12s; }
+.page-edge:hover { background: transparent; color: var(--rubric); }
 .page-meta { display: flex; justify-content: space-between; align-items: baseline;
-  margin-top: 12px; color: var(--fg-dim); font-size: 0.85rem; font-style: italic; }
-.page-meta .hint { font-size: 0.78rem; }
+  margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
+.page-meta .hint { font-size: 0.74rem; }
 @media (max-width: 520px) {
-  .page { height: 60vh; padding: 22px 20px; font-size: 1.08rem; }
-  .page-edge { flex-basis: 38px; }
+  .page { padding: 18px 16px; font-size: 1.06rem; }
+  .page-edge { flex-basis: 26px; font-size: 1.4rem; }
   .page-meta .hint { display: none; }
 }
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(20,14,6,.55);
