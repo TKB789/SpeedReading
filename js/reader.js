@@ -200,9 +200,18 @@
    */
   function setupTapPrompt() {
     els.rail.addEventListener('click', onRailTap);
+    // Prompt buttons must not bubble to the page/rail tap handlers underneath.
+    ['tpSetWord', 'tpExpand', 'tpCancel'].forEach(function (id) {
+      document.getElementById(id).addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+    });
     document.getElementById('tpSetWord').addEventListener('click', commitStartWord);
     document.getElementById('tpExpand').addEventListener('click', openPageRead);
     document.getElementById('tpCancel').addEventListener('click', cancelPrompt);
+    // Also stop taps inside the prompt panel from reaching the page.
+    var panel = document.querySelector('.tap-prompt-inner');
+    if (panel) panel.addEventListener('click', function (e) { e.stopPropagation(); });
   }
 
   function onRailTap() {
@@ -241,11 +250,8 @@
     selectedIndex = idx;
     var prev = document.querySelector('#page .pg-word.picked');
     if (prev) prev.classList.remove('picked');
-    var spans = document.querySelectorAll('#page .pg-word');
-    var target = null;
-    for (var i = 0; i < spans.length; i++) {
-      if (parseInt(spans[i].dataset.index, 10) <= idx) target = spans[i]; else break;
-    }
+    // Highlight the exact span carrying this index.
+    var target = document.querySelector('#page .pg-word[data-index="' + idx + '"]');
     if (target) target.classList.add('picked');
     document.getElementById('tapPromptMsg').textContent =
       'Start speed-reading from \u201C' + (target ? target.textContent.trim() : 'here') + '\u201D, or cancel.';
@@ -253,12 +259,17 @@
 
   // Set start word → begin speed-read at the selected word.
   function commitStartWord() {
-    if (selectedIndex == null) {
+    var pick = selectedIndex;
+    // Fallback: if state was cleared but a word is visibly picked, use that.
+    if (pick == null) {
+      var pk = document.querySelector('#page .pg-word.picked');
+      if (pk) pick = parseInt(pk.dataset.index, 10);
+    }
+    if (pick == null) {
       document.getElementById('tapPromptMsg').textContent =
         'Tap a word in the text first, then press Set start word.';
       return;
     }
-    var pick = selectedIndex;
     disarm();
     engine.seek(pick);
     switchView('rsvp');
