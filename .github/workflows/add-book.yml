@@ -20,9 +20,13 @@ name: Add book
 on:
   workflow_dispatch:
     inputs:
+      query:
+        description: "Search by title/author (e.g. 'frankenstein shelley'). Builds the top match. Use this OR the ID below."
+        required: false
+        type: string
       gutenberg_id:
-        description: "Project Gutenberg numeric ID (from the book's URL, e.g. 1342)"
-        required: true
+        description: "Project Gutenberg numeric ID (from the book's URL, e.g. 1342). Used if Search is blank."
+        required: false
         type: string
       slug:
         description: "Short id for the file (optional, e.g. 'pride'). Defaults to pg<ID>."
@@ -54,16 +58,24 @@ jobs:
 
       - name: Build the book
         run: |
+          QUERY="${{ github.event.inputs.query }}"
           ID="${{ github.event.inputs.gutenberg_id }}"
           SLUG="${{ github.event.inputs.slug }}"
           TITLE="${{ github.event.inputs.title }}"
           AUTHOR="${{ github.event.inputs.author }}"
-          # Pass only the arguments that were provided.
-          ARGS=(--gutenberg "$ID")
-          [ -n "$SLUG" ]   && ARGS+=("$SLUG")
-          [ -n "$TITLE" ]  && ARGS+=("$TITLE")
-          [ -n "$AUTHOR" ] && ARGS+=("$AUTHOR")
-          node build-book.js "${ARGS[@]}"
+          if [ -n "$QUERY" ]; then
+            # Search by title/author and build the top public-domain match.
+            node build-book.js --search "$QUERY" --build
+          elif [ -n "$ID" ]; then
+            ARGS=(--gutenberg "$ID")
+            [ -n "$SLUG" ]   && ARGS+=("$SLUG")
+            [ -n "$TITLE" ]  && ARGS+=("$TITLE")
+            [ -n "$AUTHOR" ] && ARGS+=("$AUTHOR")
+            node build-book.js "${ARGS[@]}"
+          else
+            echo "Provide either a Search query or a Gutenberg ID."
+            exit 1
+          fi
 
       - name: Commit and push the new book
         run: |
@@ -74,5 +86,5 @@ jobs:
             echo "No changes — the book may already exist or the fetch returned nothing."
             exit 0
           fi
-          git commit -m "Add Gutenberg #${{ github.event.inputs.gutenberg_id }} to library"
+          git commit -m "Add book to library (query='${{ github.event.inputs.query }}' id='${{ github.event.inputs.gutenberg_id }}')"
           git push
