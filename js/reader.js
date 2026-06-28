@@ -53,7 +53,6 @@
   Store.requestPersistence();
 
   var engine = null, tokens = null, book = null, saveTimer = null;
-  var pendingPickIndex = null;
 
   function loadBook() {
     if (src === 'user') {
@@ -200,18 +199,21 @@
   }
 
   /* ---------- Tap interaction (unified for both reading areas) ----------
-   * States: 'idle' → (tap any area) → 'armed' (box highlighted + prompt) →
-   *   'Set start word' → 'picking' (tap a word) → starts speed-read there.
-   * Any stray tap while armed/picking just resumes (guards accidental taps).
+   * idle → (tap area) → armed: box highlighted, prompt shown.
+   *   While armed, tapping a WORD highlights it and remembers it (selectedIndex);
+   *   tapping another word just moves the highlight. The box stays armed.
+   *   'Set start word' → speed-read from the selected word (or, if none picked
+   *     yet, prompt to tap one). 'Open page read' (rsvp only) switches modes.
+   *   'Cancel' drops the selection, un-highlights, and resumes the prior state.
    */
+  var selectedIndex = null;
+
   function setupTapPrompt() {
     els.rail.addEventListener('click', function () { onAreaTap('rsvp'); });
-
-    document.getElementById('tpCancel').addEventListener('click', resumePrev);
-    document.getElementById('tpSetWord').addEventListener('click', enterPicking);
+    document.getElementById('tpCancel').addEventListener('click', cancelPrompt);
+    document.getElementById('tpSetWord').addEventListener('click', commitStartWord);
     document.getElementById('tpExpand').addEventListener('click', function () {
-      // In speed-read this button means "Open page read".
-      clearArmed();
+      clearArmed(); clearSelectedWord();
       document.getElementById('tapPrompt').hidden = true;
       tapState = 'idle';
       switchView('read');
@@ -220,7 +222,8 @@
 
   function onAreaTap(mode) {
     if (tapState === 'idle') { armPrompt(mode); return; }
-    if (tapState === 'armed' || tapState === 'picking') { resumePrev(); }
+    // Tapping the rail background while armed = cancel (resume).
+    cancelPrompt();
   }
 
   function armPrompt(mode) {
@@ -228,34 +231,40 @@
     var msg = document.getElementById('tapPromptMsg');
     if (engine) engine.pause();
     tapState = 'armed';
-    pendingPickIndex = null;
+    selectedIndex = null;
     clearArmed();
+    var setBtn = document.getElementById('tpSetWord');
+    var exBtn = document.getElementById('tpExpand');
     if (mode === 'rsvp') {
       els.rail.classList.add('area-armed');
-      msg.textContent = 'Set a start word, open page reading, or resume.';
-      document.getElementById('tpSetWord').hidden = false;
-      var ex = document.getElementById('tpExpand');
-      ex.hidden = false; ex.textContent = 'Open page read';
+      document.getElementById('page').classList.add('area-armed');
+      msg.textContent = 'Tap a word to start there, or open page reading.';
+      exBtn.hidden = false; exBtn.textContent = 'Open page read';
     } else {
       document.getElementById('page').classList.add('area-armed');
-      msg.textContent = 'Set a start word to speed-read, or resume reading.';
-      document.getElementById('tpSetWord').hidden = false;
-      document.getElementById('tpExpand').hidden = true;
+      msg.textContent = 'Tap a word to start speed-reading there, or cancel.';
+      exBtn.hidden = true;
     }
+    setBtn.hidden = false;
+    document.getElementById('tpCancel').textContent = 'Cancel';
     prompt.hidden = false;
   }
 
-  function enterPicking() {
-    var prompt = document.getElementById('tapPrompt');
-    var msg = document.getElementById('tapPromptMsg');
-    tapState = 'picking';
-    document.getElementById('pagedView').hidden = false;
-    document.getElementById('page').classList.add('area-armed');
-    els.rail.classList.remove('area-armed');
-    msg.textContent = 'Tap any word in the text to start speed-reading there.';
-    document.getElementById('tpSetWord').hidden = true;
-    document.getElementById('tpExpand').hidden = true;
-    prompt.hidden = false;
+  // "Set start word": act on the selected word now. If nothing selected yet,
+  // nudge the user to tap one (stay armed).
+  function commitStartWord() {
+    if (selectedIndex == null) {
+      document.getElementById('tapPromptMsg').textContent =
+        'Tap a word in the text first, then press Set start word.';
+      return;
+    }
+    var pick = selectedIndex;
+    clearArmed(); clearSelectedWord();
+    document.getElementById('tapPrompt').hidden = true;
+    tapState = 'idle';
+    engine.seek(pick);
+    switchView('rsvp');
+    paged.follow(pick);
   }
 
   function clearArmed() {
@@ -263,26 +272,40 @@
     document.getElementById('page').classList.remove('area-armed');
   }
 
-  function resumePrev() {
+  function clearSelectedWord() {
+    selectedIndex = null;
+    var prev = document.querySelector('.pg-word.picked');
+    if (prev) prev.classList.remove('picked');
+  }
+
+  // Cancel: drop selection, un-highlight, resume what we were doing.
+  function cancelPrompt() {
     document.getElementById('tapPrompt').hidden = true;
-    clearArmed();
-    pendingPickIndex = null;
+    clearArmed(); clearSelectedWord();
     tapState = 'idle';
     if (currentView === 'rsvp') switchView('rsvp');
   }
 
-  // Called when the paged area is tapped. idx = word index, or null for a gap.
+  // Tap on a word in the paged area. idx = word index, or null for a gap tap.
   function handleWordTap(idx) {
-    if (tapState === 'picking') {
-      if (idx == null) return;
-      engine.seek(idx);
-      resumePrev();
-      switchView('rsvp');
-      paged.follow(idx);
-      return;
+    if (tapState === 'idle') { armPrompt(currentView); return; }
+    if (tapState !== 'armed') return;
+    if (idx == null) return; // gap tap while armed: ignore (keep selection)
+    // Select / move the highlight to this word; stay armed.
+    selectedIndex = idx;
+    var prev = document.querySelector('.pg-word.picked');
+    if (prev) prev.classList.remove('picked');
+    // Find the span carrying this index (or nearest at-or-before it).
+    var spans = document.querySelectorAll('#page .pg-word');
+    var target = null;
+    for (var i = 0; i < spans.length; i++) {
+      if (parseInt(spans[i].dataset.index, 10) <= idx) target = spans[i];
+      else break;
     }
-    if (tapState === 'idle') { armPrompt('read'); return; }
-    if (tapState === 'armed') { resumePrev(); }
+    if (target) target.classList.add('picked');
+    document.getElementById('tapPromptMsg').textContent =
+      'Start speed-reading from “' + (target ? target.textContent.trim() : 'selected') +
+      '”, or cancel.';
   }
 
   // Render a token with the pivot pinned to rail centre.
