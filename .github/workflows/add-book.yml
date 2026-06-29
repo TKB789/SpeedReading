@@ -25,7 +25,7 @@ on:
         required: false
         type: string
       gutenberg_id:
-        description: "Project Gutenberg numeric ID (from the book's URL, e.g. 1342). Used if Search is blank."
+        description: "Project Gutenberg numeric ID(s). One (e.g. 1342) or several separated by commas (e.g. 1342, 84, 2701). Used if Search is blank."
         required: false
         type: string
       slug:
@@ -68,9 +68,15 @@ jobs:
             node build-book.js --search "$QUERY" --build
           elif [ -n "$ID" ]; then
             ARGS=(--gutenberg "$ID")
-            [ -n "$SLUG" ]   && ARGS+=("$SLUG")
-            [ -n "$TITLE" ]  && ARGS+=("$TITLE")
-            [ -n "$AUTHOR" ] && ARGS+=("$AUTHOR")
+            # Slug/title/author only apply to a single ID. If the ID field holds
+            # a list (comma or space), ignore them — metadata comes from Gutendex.
+            if printf '%s' "$ID" | grep -q '[, ]'; then
+              echo "Multiple IDs detected — building each; slug/title/author ignored."
+            else
+              [ -n "$SLUG" ]   && ARGS+=("$SLUG")
+              [ -n "$TITLE" ]  && ARGS+=("$TITLE")
+              [ -n "$AUTHOR" ] && ARGS+=("$AUTHOR")
+            fi
             node build-book.js "${ARGS[@]}"
           else
             echo "Provide either a Search query or a Gutenberg ID."
