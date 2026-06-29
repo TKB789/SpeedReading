@@ -1,14 +1,5 @@
 [
   {
-    "id": "alice-sample",
-    "title": "Alice in Wonderland (sample)",
-    "author": "Lewis Carroll",
-    "wordCount": 810,
-    "cover": null,
-    "source": "Project Gutenberg #11 — public domain",
-    "sample": true
-  },
-  {
     "id": "pg11",
     "title": "Alice's Adventures in Wonderland",
     "author": "Carroll, Lewis",
