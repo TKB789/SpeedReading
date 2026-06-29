@@ -1,10 +1,6 @@
 /*
  * parser.js — turn a Project Gutenberg plain-text string into structured book
  * data: { title, author, wordCount, chapters: [{ title, paras: [...] }] }.
- *
- * Pure function, no DOM and no Node APIs, so the same code runs in the browser
- * (file upload) and in build-book.js (repo books). Exposed as a global
- * `GutenbergParser` for the browser and via module.exports for Node.
  */
 (function (root) {
   'use strict';
@@ -12,17 +8,32 @@
   // A genuine chapter/section heading. Gutenberg hard-wraps prose, so lines
   // frequently begin with "I", "I.", or a number — we must NOT treat those as
   // headings. Require an explicit keyword (CHAPTER/LETTER/PART/BOOK/etc.), OR a
-  // standalone multi-character roman numeral line, OR "Chapter N"-style. A bare
-  // single letter or a bare arabic number is rejected to avoid false splits.
-  var HEADING_KEYWORD = /^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*[ivxlcdm\d]*\.?\s*$/i;
+  // standalone multi-character roman numeral line, OR "Chapter N"-style.
+  //
+  // The keyword form allows an optional title AFTER the number on the same line,
+  // e.g. "CHAPTER 1. Loomings." or "CHAPTER I. The Carpet-Bag." — many books
+  // (Moby Dick, etc.) put the chapter title inline, and the heading must still
+  // be recognised. We require either end-of-line after the numeral, OR a
+  // separator (period / colon / dash / space) followed by a short title.
+  var HEADING_KEYWORD = /^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*([ivxlcdm\d]+)?\.?(\s*[—:.\-]?\s+\S.*)?$/i;
   var ROMAN_ONLY = /^\s*[IVXLCDM]{1,7}\.?\s*$/; // uppercase only, on its own line
   function isHeading(line) {
     var t = line.trim();
     if (!t) return false;
-    if (HEADING_KEYWORD.test(t)) return true;
-    // Standalone roman numeral, but reject single ambiguous letters (I, V, X, L,
-    // C, D, M) which are usually the pronoun "I" or stray caps. Require ≥2 chars,
-    // OR exactly "I." / "V." etc. with a trailing period AND short line.
+    if (HEADING_KEYWORD.test(t)) {
+      // Guard against prose that merely begins with a keyword ("Part of the
+      // crew…", "Book lovers everywhere…"). A real heading: is short; does not
+      // read as a sentence (no internal sentence-ending punctuation followed by
+      // more words); and isn't a run of many lowercase words. We allow a single
+      // trailing period (common in "CHAPTER 1. Loomings.").
+      if (t.length > 80) return false;
+      var inlineTitle = t.replace(/^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*[ivxlcdm\d]*\.?\s*[—:.\-]?\s*/i, '');
+      // Internal sentence break (". " or "; ") mid-line ⇒ prose, not a heading.
+      if (/[.;]\s+\S/.test(inlineTitle)) return false;
+      // A long run of words is prose; real inline titles are short.
+      if (inlineTitle.split(/\s+/).filter(Boolean).length > 9) return false;
+      return true;
+    }
     if (ROMAN_ONLY.test(t)) {
       var core = t.replace(/\./g, '');
       if (core.length >= 2) return true;          // "II", "IV", "XII" → heading
@@ -40,13 +51,10 @@
     if (s !== -1) t = t.slice(s).replace(startRe, '');
     var e = t.search(endRe);
     if (e !== -1) t = t.slice(0, e);
-    // Drop a leading metadata block (Title:/Author:/Release date:/Language:/
-    // Credits:) that some PG texts place after the START marker.
     t = t.replace(/^(?:\s*(?:Title|Author|Release date|Language|Credits|Other information and formats|Most recently updated|Produced by|Illustrator|Translator)\s*:[^\n]*\n?\s*\n?)+/i, '');
     return t.trim();
   }
 
-  // Pull "Title:" and "Author:" out of the PG header if present.
   function extractMeta(raw) {
     var meta = { title: null, author: null };
     var titleM = /^\s*Title:\s*(.+)$/im.exec(raw);
@@ -84,24 +92,23 @@
       if (isHeading(line)) {
         flushChapter();
         var title = line.trim().replace(/\s+/g, ' ');
-        // If the heading is a bare numeral, the next short line MAY be the
-        // chapter's title (e.g. "CHAPTER IV" / "The Departure"). Only fold it in
-        // when it looks like a title: short, and not the start of flowing prose
-        // (no trailing comma/lowercase-run, not ending mid-sentence).
-        var j = i + 1;
-        while (j < lines.length && lines[j].trim() === '') j++;
-        var bareNumeralHeading = /^(chapter|letter|part|book|volume|stave|canto)\s*[ivxlcdm\d]*\.?$|^[ivxlcdm]+\.?$/i.test(title.trim());
-        if (bareNumeralHeading && j < lines.length) {
-          var cand = lines[j].trim();
-          var looksLikeTitle = cand && cand.length < 50 && !isHeading(lines[j]) &&
-            !/[,;]$/.test(cand) &&            // not a wrapped prose line
-            !/[a-z]$/.test(cand) === false && // (kept permissive)
-            !/["'\u201c]/.test(cand.charAt(0)) && // not opening dialogue
-            /^[A-Z]/.test(cand);              // titles start capitalised
-          // Heuristic: a real title is usually Title Case or all-caps and short.
-          if (looksLikeTitle && cand.split(' ').length <= 7) {
-            title += ' — ' + cand;
-            i = j;
+        // If the heading is a BARE numeral (no inline title), the next short line
+        // MAY be the chapter's title on its own line. Only fold it in when it
+        // looks like a title (short, capitalised, not flowing prose).
+        var hasInlineTitle = /[a-z]/i.test(title.replace(/^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*[ivxlcdm\d]*\.?/i, ''));
+        if (!hasInlineTitle) {
+          var j = i + 1;
+          while (j < lines.length && lines[j].trim() === '') j++;
+          if (j < lines.length) {
+            var cand = lines[j].trim();
+            var looksLikeTitle = cand && cand.length < 50 && !isHeading(lines[j]) &&
+              !/[,;]$/.test(cand) &&
+              !/["'\u201c]/.test(cand.charAt(0)) &&
+              /^[A-Z]/.test(cand);
+            if (looksLikeTitle && cand.split(' ').length <= 7) {
+              title += ' — ' + cand;
+              i = j;
+            }
           }
         }
         current = { title: title, paras: [] };
@@ -125,7 +132,6 @@
     return chapters;
   }
 
-  // Main entry. `fallback` supplies title/author when the header lacks them.
   function parse(raw, fallback) {
     fallback = fallback || {};
     var meta = extractMeta(raw);
