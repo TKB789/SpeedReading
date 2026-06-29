@@ -17,11 +17,10 @@
     var n = letterIdx.length;
     if (n <= 1) return letterIdx.length ? letterIdx[0] : 0;
 
-    // Pivot by letter POSITION (1-based): 1→1st, 2→2nd, 3→3rd letter.
-    // (Index p is 0-based, so the k-th letter is index k-1.)
+    // Pivot by letter position: 1-letter → 1st letter; 2- and 3-letter → 2nd
+    // letter. (Index p is 0-based.)
     var p;
-    if (n === 2) p = 1;
-    else if (n === 3) p = 2;
+    if (n === 2 || n === 3) p = 1;
     // Words 4+ letters: place the pivot one letter left of centre for a better
     // visual balance (the long tail otherwise pushes the word off to one side).
     else p = Math.floor(n / 2) - 1;
