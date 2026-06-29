@@ -19,7 +19,16 @@
     this.current = 0;
     this.onTap = opts.onWordTap || function () {};
     this.onPageChange = opts.onPageChange || function () {};
+    // Optional pagination cache: cacheLoad(key)→pages|null, cacheSave(key,pages).
+    this.cacheLoad = opts.cacheLoad || function () { return null; };
+    this.cacheSave = opts.cacheSave || function () {};
+    this.cacheId = opts.cacheId || '';   // book identity for the cache key
   }
+
+  // Build a cache key from the book identity, word count, and box dimensions.
+  Paged.prototype._cacheKey = function (maxH, maxW, nWords) {
+    return this.cacheId + '|' + nWords + '|' + maxW + 'x' + maxH;
+  };
 
   // Reconstruct display words from tokens, re-joining hyphen-split long words so
   // the reader shows natural text while still mapping taps to token indices.
@@ -67,6 +76,20 @@
       return true;
     }
     this.words = this._displayWordsCached();
+    // Try a saved pagination for this book + size before the expensive measure.
+    var ckey = this._cacheKey(maxH, maxW, this.words.length);
+    if (!force) {
+      var cached = null;
+      try { cached = this.cacheLoad(ckey); } catch (e) { cached = null; }
+      if (cached && cached.length) {
+        this.pages = cached;
+        this._builtH = maxH; this._builtW = maxW;
+        if (this.current >= this.pages.length) this.current = this.pages.length - 1;
+        if (this.current < 0) this.current = 0;
+        this.renderPage(this.current);
+        return true;
+      }
+    }
     this.pages = [];
     this._builtH = maxH; this._builtW = maxW;
     // Build paragraph blocks, then fill pages by appending blocks/words.
@@ -118,6 +141,8 @@
     commitPage(this.words.length);
     el.innerHTML = '';
     if (this.current >= this.pages.length) this.current = this.pages.length - 1;
+    // Save this layout so the next open at the same size is instant.
+    try { this.cacheSave(this._cacheKey(maxH, maxW, this.words.length), this.pages); } catch (e) {}
     this.renderPage(this.current);
     return true;
   };

@@ -136,6 +136,9 @@
     var pageEl = document.getElementById('page');
     paged = new Paged(pageEl, {
       onWordTap: handlePageTap,
+      cacheId: (src === 'user' ? 'u:' : '') + bookId,
+      cacheLoad: function (key) { return Store.getPageCache(key); },
+      cacheSave: function (key, pages) { Store.savePageCache(key, pages); },
       onPageChange: function (info) {
         document.getElementById('pageNum').textContent =
           'page ' + info.page + ' of ' + info.total;

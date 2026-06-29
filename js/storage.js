@@ -13,6 +13,7 @@
   var KEY_LIBRARY  = PREFIX + 'library';     // user-uploaded books index
   var KEY_BOOK     = PREFIX + 'book:';       // + bookId (full parsed book)
   var KEY_LASTBOOK = PREFIX + 'lastbook';    // {id, src} of the most recent read
+  var KEY_PAGECACHE = PREFIX + 'pagecache:'; // + cacheKey (paginated layout)
 
   function lsGet(k, fallback) {
     try { var v = localStorage.getItem(k); return v == null ? fallback : JSON.parse(v); }
@@ -102,6 +103,43 @@
     return n;
   }
 
+  // Pagination layout cache. Keyed by book + word-count + box dimensions, so a
+  // change in screen size or content rebuilds automatically. Stored compactly.
+  function getPageCache(key) {
+    return lsGet(KEY_PAGECACHE + key, null);
+  }
+  function savePageCache(key, pages) {
+    // Store a compact form: [startWord, endWord] pairs (start is derivable).
+    var compact = pages.map(function (p) { return [p.startWord, p.endWord, p.start]; });
+    try {
+      localStorage.setItem(KEY_PAGECACHE + key, JSON.stringify(compact));
+    } catch (e) {
+      // Quota exceeded — clear old page caches and retry once.
+      prunePageCaches(key);
+      try { localStorage.setItem(KEY_PAGECACHE + key, JSON.stringify(compact)); }
+      catch (e2) { /* give up; pagination still works, just not cached */ }
+    }
+  }
+  // Inflate compact cache back into {startWord, endWord, start} objects.
+  function inflatePageCache(key) {
+    var c = getPageCache(key);
+    if (!c || !c.length) return null;
+    return c.map(function (a) { return { startWord: a[0], endWord: a[1], start: a[2] }; });
+  }
+  // Remove all page caches except the one we're about to write (frees quota).
+  function prunePageCaches(keepKey) {
+    try {
+      var toRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(KEY_PAGECACHE) === 0 && k !== (KEY_PAGECACHE + keepKey)) {
+          toRemove.push(k);
+        }
+      }
+      toRemove.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+  }
+
   var api = {
     requestPersistence: requestPersistence, isPersisted: isPersisted,
     getSettings: getSettings, saveSettings: saveSettings,
@@ -109,6 +147,7 @@
     setLastBook: setLastBook, getLastBook: getLastBook, clearLastBook: clearLastBook,
     getUserLibrary: getUserLibrary, getUserBook: getUserBook,
     saveUserBook: saveUserBook, deleteUserBook: deleteUserBook,
+    getPageCache: inflatePageCache, savePageCache: savePageCache,
     exportAll: exportAll, importAll: importAll
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
