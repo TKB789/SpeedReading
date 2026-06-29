@@ -16,6 +16,14 @@
     "source": "Project Gutenberg #2554 — public domain"
   },
   {
+    "id": "pg145",
+    "title": "Middlemarch",
+    "author": "George Eliot",
+    "wordCount": 315981,
+    "cover": null,
+    "source": "Project Gutenberg #145 — public domain"
+  },
+  {
     "id": "pg2701",
     "title": "Moby Dick; Or, The Whale",
     "author": "Herman Melville",
@@ -38,5 +46,13 @@
     "wordCount": 25938,
     "cover": null,
     "source": "Project Gutenberg #1513 — public domain"
+  },
+  {
+    "id": "pg100",
+    "title": "The Complete Works of William Shakespeare",
+    "author": "Shakespeare, William",
+    "wordCount": 962470,
+    "cover": null,
+    "source": "Project Gutenberg #100 — public domain"
   }
 ]
