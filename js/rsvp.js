@@ -6,20 +6,32 @@
   'use strict';
 
   function pivotIndex(word) {
-    var n = word.length;
-    if (n <= 1) return 0;
+    // Count only letters/digits for choosing the pivot bucket — leading or
+    // trailing punctuation (quotes, commas, parens, dashes) must not shift the
+    // red letter. We compute the pivot on the letters-only string, then map it
+    // back to a real index in the original word.
+    var letterIdx = [];           // letterIdx[k] = index in `word` of the k-th letter
+    for (var i = 0; i < word.length; i++) {
+      if (/[A-Za-z0-9\u00C0-\u024F]/.test(word[i])) letterIdx.push(i);
+    }
+    var n = letterIdx.length;
+    if (n <= 1) return letterIdx.length ? letterIdx[0] : 0;
+
+    // Pivot by letter POSITION (1-based): 1→1st, 2→2nd, 3→3rd letter.
+    // (Index p is 0-based, so the k-th letter is index k-1.)
     var p;
-    if (n <= 5) p = 1;
-    else if (n <= 9) p = 2;
-    else if (n <= 10) p = 3;
-    // Words 11+ chars: place the pivot one letter left of centre for a better
+    if (n === 2) p = 1;
+    else if (n === 3) p = 2;
+    // Words 4+ letters: place the pivot one letter left of centre for a better
     // visual balance (the long tail otherwise pushes the word off to one side).
     else p = Math.floor(n / 2) - 1;
+
     // Safety: never leave more than 9 letters trailing the pivot, so the right
     // side can't run off the rail.
     var maxTrailing = 9;
     if (n - 1 - p > maxTrailing) p = n - 1 - maxTrailing;
-    return p;
+
+    return letterIdx[p];
   }
 
   function chunkLongWord(word, max) {
