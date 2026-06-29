@@ -2,8 +2,8 @@
   {
     "id": "pg2542",
     "title": "A Doll's House : a play",
-    "author": "Henrik Ibsen",
-    "wordCount": 26466,
+    "author": "Ibsen, Henrik",
+    "wordCount": 26463,
     "cover": null,
     "source": "Project Gutenberg #2542 — public domain"
   },
@@ -27,7 +27,7 @@
     "id": "pg98",
     "title": "A Tale of Two Cities",
     "author": "Dickens, Charles",
-    "wordCount": 135678,
+    "wordCount": 135433,
     "cover": null,
     "source": "Project Gutenberg #98 — public domain"
   },
@@ -35,7 +35,7 @@
     "id": "pg76",
     "title": "Adventures of Huckleberry Finn",
     "author": "Twain, Mark",
-    "wordCount": 110917,
+    "wordCount": 110859,
     "cover": null,
     "source": "Project Gutenberg #76 — public domain"
   },
@@ -43,7 +43,7 @@
     "id": "pg11",
     "title": "Alice's Adventures in Wonderland",
     "author": "Carroll, Lewis",
-    "wordCount": 26459,
+    "wordCount": 26385,
     "cover": null,
     "source": "Project Gutenberg #11 — public domain"
   },
@@ -59,17 +59,9 @@
     "id": "pg2554",
     "title": "Crime and Punishment",
     "author": "Dostoyevsky, Fyodor",
-    "wordCount": 203414,
+    "wordCount": 203400,
     "cover": null,
     "source": "Project Gutenberg #2554 — public domain"
-  },
-  {
-    "id": "pg345",
-    "title": "Dracula",
-    "author": "Stoker, Bram",
-    "wordCount": 161267,
-    "cover": null,
-    "source": "Project Gutenberg #345 — public domain"
   },
   {
     "id": "pg45839",
@@ -80,6 +72,14 @@
     "source": "Project Gutenberg #45839 — public domain"
   },
   {
+    "id": "pg345",
+    "title": "Dracula",
+    "author": "Stoker, Bram",
+    "wordCount": 161115,
+    "cover": null,
+    "source": "Project Gutenberg #345 — public domain"
+  },
+  {
     "id": "pg76639",
     "title": "Eloisa : $b or, A series of original letters",
     "author": "Rousseau, Jean-Jacques",
@@ -88,18 +88,26 @@
     "source": "Project Gutenberg #76639 — public domain"
   },
   {
+    "id": "pg84",
+    "title": "Frankenstein; or, the modern prometheus",
+    "author": "Mary Wollstonecraft Shelley",
+    "wordCount": 74930,
+    "cover": null,
+    "source": "Project Gutenberg #84 — public domain"
+  },
+  {
     "id": "pg6593",
     "title": "History of Tom Jones, a Foundling",
     "author": "Fielding, Henry",
-    "wordCount": 350121,
+    "wordCount": 348764,
     "cover": null,
     "source": "Project Gutenberg #6593 — public domain"
   },
   {
     "id": "pg1260",
     "title": "Jane Eyre: An Autobiography",
-    "author": "Charlotte Brontë",
-    "wordCount": 185316,
+    "author": "Brontë, Charlotte",
+    "wordCount": 185311,
     "cover": null,
     "source": "Project Gutenberg #1260 — public domain"
   },
@@ -114,8 +122,8 @@
   {
     "id": "pg37106",
     "title": "Little Women; Or, Meg, Jo, Beth, and Amy",
-    "author": "Louisa May Alcott",
-    "wordCount": 192511,
+    "author": "Alcott, Louisa May",
+    "wordCount": 192485,
     "cover": null,
     "source": "Project Gutenberg #37106 — public domain"
   },
@@ -131,23 +139,23 @@
     "id": "pg2680",
     "title": "Meditations",
     "author": "Marcus Aurelius, Emperor of Rome",
-    "wordCount": 71957,
+    "wordCount": 71953,
     "cover": null,
     "source": "Project Gutenberg #2680 — public domain"
   },
   {
     "id": "pg145",
     "title": "Middlemarch",
-    "author": "George Eliot",
-    "wordCount": 315981,
+    "author": "Eliot, George",
+    "wordCount": 315865,
     "cover": null,
     "source": "Project Gutenberg #145 — public domain"
   },
   {
     "id": "pg2701",
     "title": "Moby Dick; Or, The Whale",
-    "author": "Herman Melville",
-    "wordCount": 212796,
+    "author": "Melville, Herman",
+    "wordCount": 211611,
     "cover": null,
     "source": "Project Gutenberg #2701 — public domain"
   },
@@ -160,14 +168,6 @@
     "source": "Project Gutenberg #47530 — public domain"
   },
   {
-    "id": "pg1342",
-    "title": "Pride and Prejudice",
-    "author": "Jane Austen",
-    "wordCount": 127238,
-    "cover": null,
-    "source": "Project Gutenberg #1342 — public domain"
-  },
-  {
     "id": "pg42671",
     "title": "Pride and Prejudice",
     "author": "Austen, Jane",
@@ -176,10 +176,18 @@
     "source": "Project Gutenberg #42671 — public domain"
   },
   {
+    "id": "pg1342",
+    "title": "Pride and Prejudice",
+    "author": "Austen, Jane",
+    "wordCount": 127224,
+    "cover": null,
+    "source": "Project Gutenberg #1342 — public domain"
+  },
+  {
     "id": "pg1513",
     "title": "Romeo and Juliet",
-    "author": "William Shakespeare",
-    "wordCount": 25938,
+    "author": "Shakespeare, William",
+    "wordCount": 25691,
     "cover": null,
     "source": "Project Gutenberg #1513 — public domain"
   },
@@ -203,7 +211,7 @@
     "id": "pg74",
     "title": "The Adventures of Tom Sawyer, Complete",
     "author": "Twain, Mark",
-    "wordCount": 70730,
+    "wordCount": 70465,
     "cover": null,
     "source": "Project Gutenberg #74 — public domain"
   },
@@ -211,7 +219,7 @@
     "id": "pg28054",
     "title": "The Brothers Karamazov",
     "author": "Dostoyevsky, Fyodor",
-    "wordCount": 350136,
+    "wordCount": 349484,
     "cover": null,
     "source": "Project Gutenberg #28054 — public domain"
   },
@@ -227,7 +235,7 @@
     "id": "pg100",
     "title": "The Complete Works of William Shakespeare",
     "author": "Shakespeare, William",
-    "wordCount": 962470,
+    "wordCount": 956787,
     "cover": null,
     "source": "Project Gutenberg #100 — public domain"
   },
@@ -238,6 +246,14 @@
     "wordCount": 111795,
     "cover": null,
     "source": "Project Gutenberg #3296 — public domain"
+  },
+  {
+    "id": "pg1184",
+    "title": "The Count of Monte Cristo",
+    "author": "Dumas, Alexandre",
+    "wordCount": 459800,
+    "cover": null,
+    "source": "Project Gutenberg #1184 — public domain"
   },
   {
     "id": "pg70854",
@@ -258,8 +274,8 @@
   {
     "id": "pg64317",
     "title": "The Great Gatsby",
-    "author": "F. Scott Fitzgerald",
-    "wordCount": 48192,
+    "author": "Fitzgerald, F. Scott (Francis Scott)",
+    "wordCount": 48186,
     "cover": null,
     "source": "Project Gutenberg #64317 — public domain"
   },
@@ -291,7 +307,7 @@
     "id": "pg174",
     "title": "The Picture of Dorian Gray",
     "author": "Wilde, Oscar",
-    "wordCount": 78899,
+    "wordCount": 78897,
     "cover": null,
     "source": "Project Gutenberg #174 — public domain"
   },
@@ -310,6 +326,14 @@
     "wordCount": 25685,
     "cover": null,
     "source": "Project Gutenberg #42 — public domain"
+  },
+  {
+    "id": "pg43",
+    "title": "The strange case of Dr. Jekyll and Mr. Hyde",
+    "author": "Stevenson, Robert Louis",
+    "wordCount": 25629,
+    "cover": null,
+    "source": "Project Gutenberg #43 — public domain"
   },
   {
     "id": "pg120",
@@ -331,7 +355,7 @@
     "id": "pg768",
     "title": "Wuthering Heights",
     "author": "Brontë, Emily",
-    "wordCount": 115877,
+    "wordCount": 115871,
     "cover": null,
     "source": "Project Gutenberg #768 — public domain"
   }
