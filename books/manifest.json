@@ -19,7 +19,7 @@
     "id": "pg18857",
     "title": "A Journey to the Centre of the Earth",
     "author": "Verne, Jules",
-    "wordCount": 85720,
+    "wordCount": 85319,
     "cover": null,
     "source": "Project Gutenberg #18857 — public domain"
   },
@@ -51,7 +51,7 @@
     "id": "pg103",
     "title": "Around the World in Eighty Days",
     "author": "Verne, Jules",
-    "wordCount": 63260,
+    "wordCount": 63216,
     "cover": null,
     "source": "Project Gutenberg #103 — public domain"
   },
@@ -64,14 +64,6 @@
     "source": "Project Gutenberg #2554 — public domain"
   },
   {
-    "id": "pg45839",
-    "title": "Dracula",
-    "author": "Stoker, Bram",
-    "wordCount": 160663,
-    "cover": null,
-    "source": "Project Gutenberg #45839 — public domain"
-  },
-  {
     "id": "pg345",
     "title": "Dracula",
     "author": "Stoker, Bram",
@@ -80,10 +72,18 @@
     "source": "Project Gutenberg #345 — public domain"
   },
   {
+    "id": "pg45839",
+    "title": "Dracula",
+    "author": "Stoker, Bram",
+    "wordCount": 160653,
+    "cover": null,
+    "source": "Project Gutenberg #45839 — public domain"
+  },
+  {
     "id": "pg76639",
     "title": "Eloisa : $b or, A series of original letters",
     "author": "Rousseau, Jean-Jacques",
-    "wordCount": 317658,
+    "wordCount": 317103,
     "cover": null,
     "source": "Project Gutenberg #76639 — public domain"
   },
@@ -131,7 +131,7 @@
     "id": "pg468",
     "title": "Manon Lescaut",
     "author": "Prévost, abbé",
-    "wordCount": 62268,
+    "wordCount": 62264,
     "cover": null,
     "source": "Project Gutenberg #468 — public domain"
   },
@@ -163,17 +163,9 @@
     "id": "pg47530",
     "title": "Oliver Twist, Vol. 2 (of 3)",
     "author": "Dickens, Charles",
-    "wordCount": 50609,
+    "wordCount": 50591,
     "cover": null,
     "source": "Project Gutenberg #47530 — public domain"
-  },
-  {
-    "id": "pg42671",
-    "title": "Pride and Prejudice",
-    "author": "Austen, Jane",
-    "wordCount": 121819,
-    "cover": null,
-    "source": "Project Gutenberg #42671 — public domain"
   },
   {
     "id": "pg1342",
@@ -182,6 +174,14 @@
     "wordCount": 127224,
     "cover": null,
     "source": "Project Gutenberg #1342 — public domain"
+  },
+  {
+    "id": "pg42671",
+    "title": "Pride and Prejudice",
+    "author": "Austen, Jane",
+    "wordCount": 121808,
+    "cover": null,
+    "source": "Project Gutenberg #42671 — public domain"
   },
   {
     "id": "pg1513",
@@ -203,7 +203,7 @@
     "id": "pg161",
     "title": "Sense and Sensibility",
     "author": "Austen, Jane",
-    "wordCount": 118660,
+    "wordCount": 118656,
     "cover": null,
     "source": "Project Gutenberg #161 — public domain"
   },
@@ -227,7 +227,7 @@
     "id": "pg31100",
     "title": "The Complete Project Gutenberg Works of Jane Austen: A Linked Index of all PG Editions of Jane Austen",
     "author": "Austen, Jane",
-    "wordCount": 776507,
+    "wordCount": 776301,
     "cover": null,
     "source": "Project Gutenberg #31100 — public domain"
   },
@@ -259,7 +259,7 @@
     "id": "pg70854",
     "title": "The Countess of Pembroke's Arcadia",
     "author": "Sidney, Philip",
-    "wordCount": 344985,
+    "wordCount": 344959,
     "cover": null,
     "source": "Project Gutenberg #70854 — public domain"
   },
@@ -274,7 +274,7 @@
   {
     "id": "pg64317",
     "title": "The Great Gatsby",
-    "author": "Fitzgerald, F. Scott (Francis Scott)",
+    "author": "F. Scott Fitzgerald",
     "wordCount": 48186,
     "cover": null,
     "source": "Project Gutenberg #64317 — public domain"
@@ -283,7 +283,7 @@
     "id": "pg2852",
     "title": "The Hound of the Baskervilles",
     "author": "Doyle, Arthur Conan",
-    "wordCount": 59174,
+    "wordCount": 59106,
     "cover": null,
     "source": "Project Gutenberg #2852 — public domain"
   },
@@ -291,7 +291,7 @@
     "id": "pg564",
     "title": "The Mystery of Edwin Drood",
     "author": "Dickens, Charles",
-    "wordCount": 95706,
+    "wordCount": 95506,
     "cover": null,
     "source": "Project Gutenberg #564 — public domain"
   },
@@ -299,7 +299,7 @@
     "id": "pg1727",
     "title": "The Odyssey: Rendered into English prose for the use of those who cannot read the original",
     "author": "Homer",
-    "wordCount": 129475,
+    "wordCount": 129423,
     "cover": null,
     "source": "Project Gutenberg #1727 — public domain"
   },
@@ -315,17 +315,9 @@
     "id": "pg2527",
     "title": "The Sorrows of Young Werther",
     "author": "Goethe, Johann Wolfgang von",
-    "wordCount": 42499,
+    "wordCount": 42495,
     "cover": null,
     "source": "Project Gutenberg #2527 — public domain"
-  },
-  {
-    "id": "pg42",
-    "title": "The strange case of Dr. Jekyll and Mr. Hyde",
-    "author": "Stevenson, Robert Louis",
-    "wordCount": 25685,
-    "cover": null,
-    "source": "Project Gutenberg #42 — public domain"
   },
   {
     "id": "pg43",
@@ -336,10 +328,18 @@
     "source": "Project Gutenberg #43 — public domain"
   },
   {
+    "id": "pg42",
+    "title": "The strange case of Dr. Jekyll and Mr. Hyde",
+    "author": "Stevenson, Robert Louis",
+    "wordCount": 25683,
+    "cover": null,
+    "source": "Project Gutenberg #42 — public domain"
+  },
+  {
     "id": "pg120",
     "title": "Treasure Island",
     "author": "Stevenson, Robert Louis",
-    "wordCount": 68506,
+    "wordCount": 68573,
     "cover": null,
     "source": "Project Gutenberg #120 — public domain"
   },
@@ -347,7 +347,7 @@
     "id": "pg2600",
     "title": "War and Peace",
     "author": "Tolstoy, Leo, graf",
-    "wordCount": 561820,
+    "wordCount": 561649,
     "cover": null,
     "source": "Project Gutenberg #2600 — public domain"
   },
