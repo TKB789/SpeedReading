@@ -266,11 +266,18 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
-  flex: 1; min-height: 0; }
+  flex: 1; min-height: 0; min-width: 0; }
 .page {
-  flex: 1; height: 100%; overflow: hidden;
+  /* flex-basis 0 + min-width 0 makes the page size from the flex track only, not
+     from its content. Without min-width:0 a flex item refuses to shrink below its
+     widest content (e.g. a long chapter title), so the box width would change
+     from page to page. This keeps it fixed regardless of the text on the page. */
+  flex: 1 1 0; min-width: 0; width: 0;
+  height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 22px 24px; font-size: 1.16rem; line-height: 1.66;
+  /* Break any over-long token so it can never force the box wider. */
+  overflow-wrap: break-word; word-break: break-word;
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
