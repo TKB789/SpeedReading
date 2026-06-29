@@ -6,6 +6,12 @@ on:
     branches: [main]
   # Allow manual runs from the Actions tab
   workflow_dispatch:
+  # Also run automatically after the "Add book" workflow finishes, so adding a
+  # book republishes the site with no extra clicks. The name here must match the
+  # `name:` of the add-book workflow exactly.
+  workflow_run:
+    workflows: ["Add book"]
+    types: [completed]
 
 # Permissions needed for the GITHUB_TOKEN to deploy to Pages
 permissions:
@@ -20,13 +26,16 @@ concurrency:
 
 jobs:
   deploy:
+    # When triggered by Add book, only deploy if that run SUCCEEDED. Normal
+    # pushes and manual runs (which have no workflow_run payload) still deploy.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
