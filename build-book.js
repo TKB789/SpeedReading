@@ -61,6 +61,21 @@ function searchGutendex(query) {
   });
 }
 
+// Look up a single book's metadata (title/author) by its Gutenberg ID.
+async function getMetaById(gid) {
+  try {
+    var body = await fetchText('https://gutendex.com/books/' + encodeURIComponent(gid));
+    var b = JSON.parse(body);
+    if (b && b.title) {
+      return {
+        title: b.title,
+        author: (b.authors && b.authors[0] && b.authors[0].name) || 'Unknown'
+      };
+    }
+  } catch (e) { /* fall through to defaults */ }
+  return null;
+}
+
 async function getGutenbergText(gid) {
   // Try the common plain-text URL patterns in order.
   var urls = [
@@ -131,8 +146,38 @@ async function main() {
       console.log('Or re-run this search with --build to build the top match.');
     }
   } else if (argv[0] === '--gutenberg') {
-    var gid = argv[1];
-    if (!gid) { console.error('Usage: node build-book.js --gutenberg <id> [id] ["Title"] ["Author"]'); process.exit(1); }
+    var gidArg = argv[1];
+    if (!gidArg) { console.error('Usage: node build-book.js --gutenberg <id>[,<id>...] [slug] ["Title"] ["Author"]'); process.exit(1); }
+    // Allow a list: "2701, 1342 84" → build each. When a list is given, the
+    // slug/title/author overrides are ignored (metadata comes from Gutendex).
+    var ids = gidArg.split(/[\s,]+/).filter(Boolean);
+    if (ids.length > 1) {
+      var ok = 0, failed = [];
+      for (var k = 0; k < ids.length; k++) {
+        var oneId = ids[k];
+        try {
+          console.log('\n[' + (k + 1) + '/' + ids.length + '] Project Gutenberg #' + oneId + ' …');
+          var meta = await getMetaById(oneId);
+          var rawM = await getGutenbergText(oneId);
+          var bookM = P.parse(rawM, { title: meta && meta.title, author: meta && meta.author });
+          bookM.id = 'pg' + oneId;
+          if (meta && meta.title) bookM.title = meta.title;
+          if (meta && meta.author) bookM.author = meta.author;
+          bookM.source = 'Project Gutenberg #' + oneId + ' — public domain';
+          writeBook(bookM);
+          ok++;
+        } catch (e) {
+          console.error('  Skipped #' + oneId + ': ' + e.message);
+          failed.push(oneId);
+        }
+      }
+      console.log('\nDone: ' + ok + ' added' + (failed.length ? ', ' + failed.length + ' failed (' + failed.join(', ') + ')' : '') + '.');
+      // Non-zero exit only if every single one failed.
+      if (ok === 0) process.exit(1);
+      return;
+    }
+    // Single ID (original behaviour, with optional overrides).
+    var gid = ids[0];
     var id = argv[2] || ('pg' + gid);
     console.log('Downloading Project Gutenberg #' + gid + ' …');
     var raw = await getGutenbergText(gid);
