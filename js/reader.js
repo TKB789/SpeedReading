@@ -53,6 +53,9 @@
   Store.requestPersistence();
 
   var engine = null, tokens = null, book = null, saveTimer = null;
+  var chapterStart = {};      // chapter → first index in `tokens` (rebuilt as it grows)
+  var fullyLoaded = false;    // every chapter tokenized → global % is exact
+  var resumeMode = 'read';
   // Loading-state machinery: an AbortController so we can cancel a slow fetch,
   // plus timers that escalate the message ("taking longer…") and eventually
   // give up. loadDone() clears all of this once the book is ready or has failed.
@@ -166,44 +169,250 @@
       els.chapterSel.appendChild(opt);
     });
 
-    tokens = RSVP.tokenize(b.chapters);
+    // --- Incremental, chapter-first tokenization with CONTENT COORDINATES.
+    //
+    // Tokenizing a 1,000,000-word book at once is ~1s of synchronous work — the
+    // main cause of the old load freeze. We never do that. Instead:
+    //
+    //  1. Tokenize chapter ranges, shifting each slice's local chapter numbers up
+    //     to their true global values (RSVP.tokenize counts chapters from 0).
+    //
+    //  2. Position is a CONTENT COORDINATE {chapter, para, word} — the same idea
+    //     as EPUB CFI or Kindle locations — NOT a global token count. A coordinate
+    //     is valid the instant its chapter is tokenized, regardless of how much of
+    //     the book precedes it. So a deep resume/jump paints immediately from just
+    //     that one chapter, and as the rest of the book streams in around it the
+    //     coordinate keeps pointing at the same word with NOTHING to rebase. This
+    //     is what removes the navigation-during-load races entirely.
+    //
+    // `tokens` fills in chapter order starting from the resume chapter, extending
+    // forward, and backfilling earlier chapters behind it. `chapterStart[ch]` maps
+    // a chapter to its first index in the CURRENT array for O(1) coordinate
+    // resolution. `engine.index` is always a live index into the current array;
+    // the durable position is its coordinate, recomputed on save.
+    function tokenizeRange(startCh, count) {
+      var slice = b.chapters.slice(startCh, startCh + count);
+      var toks = RSVP.tokenize(slice);
+      for (var i = 0; i < toks.length; i++) toks[i].chapter += startCh;
+      return toks;
+    }
+
+    var prog = Store.getProgress(bookId);
+    resumeMode = (prog && prog.mode) ? prog.mode : 'read';
+    // Prefer a content coordinate; fall back to a legacy global index by treating
+    // it as chapter 0 (only affects progress saved before this version).
+    var resumeCoord = (prog && prog.coord) ? prog.coord
+      : { chapter: (prog && prog.chapter != null) ? prog.chapter : 0, para: 0, word: 0 };
+    var isDeepResume = resumeCoord.chapter > 0 || resumeCoord.para > 0 || resumeCoord.word > 0;
+
     settings = Store.getSettings();
     var startWpm = settings.wpm || 400;
     var startPause = settings.pauseScale != null ? settings.pauseScale : 1;
     els.wpm.value = startWpm; els.wpmVal.textContent = startWpm + ' wpm';
     els.pauseScale.value = startPause; els.pauseVal.textContent = pauseLabel(startPause);
 
+    var FIRST_CHUNK = 2;          // chapters before first paint (cold open)
+    var REST_CHUNK = 8;           // chapters per background slice
+
+    tokens = [];
+    chapterStart = {};            // chapter → first index in `tokens` (module-scope)
+    fullyLoaded = false;          // true once every chapter is tokenized
+
+    function indexChapters() {    // (re)build chapterStart after the array changes
+      chapterStart = {};
+      for (var i = 0; i < tokens.length; i++) {
+        var c = tokens[i].chapter;
+        if (chapterStart[c] == null) chapterStart[c] = i;
+      }
+    }
+
     engine = new RSVP.Engine(tokens, {
-      wpm: startWpm,
-      pauseScale: startPause,
-      onRender: renderWord,
-      onState: onState,
+      wpm: startWpm, pauseScale: startPause,
+      onRender: renderWord, onState: onState,
       onEnd: function () { els.play.textContent = 'Replay'; }
     });
 
-    els.scrub.max = String(Math.max(0, tokens.length - 1));
+    var nextChAfter, nextChBefore;
 
-    // Build the paged reader from the same token stream.
-    setupPaged();
-
-    // Resume position and mode
-    var prog = Store.getProgress(bookId);
-    var resumeMode = 'read';
-    if (prog && prog.index > 0 && prog.index < tokens.length) {
-      engine.index = prog.index;
-      resumeMode = prog.mode || 'read';
-      renderWord(engine.current(), engine.snapshot());
-      onState(engine.snapshot());
+    if (isDeepResume) {
+      var rc = Math.min(resumeCoord.chapter, b.chapters.length - 1);
+      var resumeToks = tokenizeRange(rc, 1);
+      for (var ri = 0; ri < resumeToks.length; ri++) tokens.push(resumeToks[ri]);
+      indexChapters();
+      var startIdx = Coords.resolve(tokens, resumeCoord, chapterStart);
+      engine.index = startIdx < 0 ? 0 : startIdx;
+      nextChAfter = rc + 1;
+      nextChBefore = rc - 1;
     } else {
-      updateProgressLabel(engine.snapshot());
+      var first = tokenizeRange(0, Math.min(FIRST_CHUNK, b.chapters.length));
+      for (var fi = 0; fi < first.length; fi++) tokens.push(first[fi]);
+      indexChapters();
+      engine.index = 0;
+      nextChAfter = Math.min(FIRST_CHUNK, b.chapters.length);
+      nextChBefore = -1;
     }
-    if (paged) paged.goToIndex(engine.index);
+
+    updateScrubMax();
+
+    // Build the paged reader and paint the opening screen NOW.
+    setupPaged();
+    renderWord(engine.current(), engine.snapshot());
+    onState(engine.snapshot());
     wireControls();
-    // Apply saved mode (defaults to read). switchView positions the page too.
     switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
-    // Reader is live — tear down the loading/escape UI and stop its timers.
-    loadDone();
+    loadDone();   // reader is live and interactive; tear down the loading UI
+
+    // --- Background streaming, forward then backward, time-sliced. Each chunk
+    // PRESERVES the reader's position by coordinate: we remember the current
+    // coordinate, append/prepend tokens, re-index, and restore the live index
+    // from the coordinate. The on-screen word never moves.
+    // --- Single insertion path for ALL token additions (forward stream, backward
+    // backfill, on-demand chapter jump). Inserts a chunk at its chapter-ordered
+    // position so the array is always sorted by (chapter, para, token). Position
+    // is preserved by coordinate across every insert; the on-screen word never
+    // moves. This one code path is why ordering can't drift no matter the order
+    // chunks arrive in.
+    function insertChunk(chunk) {
+      if (!chunk.length) return;
+      // Drop any chapters already present (a chapter jump may have loaded one that
+      // a later background range also covers). This keeps inserts idempotent so
+      // overlapping ranges can never duplicate a chapter.
+      var filtered = [];
+      for (var ci = 0; ci < chunk.length; ci++) {
+        if (chapterStart[chunk[ci].chapter] == null) filtered.push(chunk[ci]);
+      }
+      if (!filtered.length) return;
+      // A chunk may now contain only some chapters; insert each contiguous
+      // chapter-run at its correct ordered position.
+      var coord = currentCoord();
+      var run = [filtered[0]];
+      for (var k = 1; k <= filtered.length; k++) {
+        if (k < filtered.length && filtered[k].chapter <= filtered[k - 1].chapter + 1
+            && filtered[k].chapter >= filtered[k - 1].chapter) {
+          run.push(filtered[k]);
+        } else {
+          spliceRun(run);
+          if (k < filtered.length) run = [filtered[k]];
+        }
+      }
+      indexChapters();
+      restoreFromCoord(coord);
+    }
+    // Splice one already-ordered run of tokens at its chapter position.
+    function spliceRun(run) {
+      var firstCh = run[0].chapter;
+      var at = tokens.length;
+      for (var i = 0; i < tokens.length; i++) {
+        if (tokens[i].chapter > firstCh) { at = i; break; }
+      }
+      var args = [at, 0].concat(run);
+      Array.prototype.splice.apply(tokens, args);
+    }
+
+    function streamForward() {
+      while (nextChAfter < b.chapters.length && chapterStart[nextChAfter] != null) nextChAfter++;
+      if (nextChAfter >= b.chapters.length) { afterDone = true; maybeFullyLoaded(); return; }
+      var t0 = now();
+      do {
+        var chunk = tokenizeRange(nextChAfter, Math.min(REST_CHUNK, b.chapters.length - nextChAfter));
+        insertChunk(chunk);
+        nextChAfter += REST_CHUNK;
+        while (nextChAfter < b.chapters.length && chapterStart[nextChAfter] != null) nextChAfter++;
+      } while (nextChAfter < b.chapters.length && (now() - t0) < 10);
+      updateScrubMax();
+      if (engine) onState(engine.snapshot());
+      setTimeout(streamForward, 0);
+    }
+
+    function streamBackward() {
+      while (nextChBefore >= 0 && chapterStart[nextChBefore] != null) nextChBefore--;
+      if (nextChBefore < 0) { beforeDone = true; maybeFullyLoaded(); return; }
+      var t0 = now();
+      do {
+        var startCh = Math.max(0, nextChBefore - REST_CHUNK + 1);
+        var count = nextChBefore - startCh + 1;
+        var chunk = tokenizeRange(startCh, count);
+        insertChunk(chunk);
+        nextChBefore = startCh - 1;
+        while (nextChBefore >= 0 && chapterStart[nextChBefore] != null) nextChBefore--;
+      } while (nextChBefore >= 0 && (now() - t0) < 10);
+      updateScrubMax();
+      if (engine) onState(engine.snapshot());
+      if (nextChBefore < 0) { beforeDone = true; maybeFullyLoaded(); return; }
+      setTimeout(streamBackward, 0);
+    }
+
+    var afterDone = !(nextChAfter < b.chapters.length);
+    var beforeDone = !(nextChBefore >= 0);
+    function maybeFullyLoaded() {
+      if (afterDone && beforeDone && !fullyLoaded) {
+        fullyLoaded = true;        // global token count is now exact → % is exact
+        updateScrubMax();
+        if (engine) onState(engine.snapshot());
+      }
+    }
+
+    // On-demand chapter load for jumps to a chapter the background stream hasn't
+    // reached yet. Tokenize it and splice into the array at its chapter-ordered
+    // position so chapterStart stays monotonic. Position preserved by coordinate.
+    _ensureChapter = function (ch) {
+      if (ch < 0 || ch >= b.chapters.length) return;
+      if (chapterStart[ch] != null) return;       // already loaded
+      insertChunk(tokenizeRange(ch, 1));
+      updateScrubMax();
+    };
+
+    if (nextChAfter < b.chapters.length) setTimeout(streamForward, 0); else afterDone = true;
+    if (nextChBefore >= 0) setTimeout(streamBackward, 0); else beforeDone = true;
+    maybeFullyLoaded();
   }
+
+  // ---- position helpers (module scope; used across setup + controls) ----
+  function now() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()); }
+
+  // The reader's current content coordinate, derived from the live engine index.
+  function currentCoord() {
+    if (!engine || !tokens.length) return { chapter: 0, para: 0, word: 0 };
+    return Coords.coordOf(tokens, Math.max(0, Math.min(tokens.length - 1, engine.index)));
+  }
+  // Restore the live engine index from a coordinate after the array grew/shifted.
+  // The paged reader is only re-anchored when its own visible range moved, to
+  // avoid re-rendering the page on every background insert.
+  function restoreFromCoord(coord) {
+    if (!engine) return;
+    var idx = Coords.resolve(tokens, coord, chapterStart);
+    if (idx < 0) idx = engine.index;
+    var delta = idx - engine.index;
+    engine.index = idx;
+    if (paged && delta !== 0) {
+      // Shift the paged window's recorded positions by the same delta so its
+      // screen stays on the same words without a re-render. follow()/goToIndex
+      // only re-render if the active word actually left the screen.
+      paged.startPos += delta; paged.endPos += delta;
+      paged.firstIndex += delta; paged.lastIndex += delta;
+    }
+  }
+  function updateScrubMax() {
+    els.scrub.max = String(Math.max(0, tokens.length - 1));
+  }
+
+  // setup() registers a tokenizer so on-demand chapter loads (chapter jumps to a
+  // not-yet-streamed chapter) can happen outside setup's closure. Returns the
+  // first token index of the chapter in the current array, tokenizing+indexing it
+  // if needed. Position is preserved by coordinate across the array change.
+  var _ensureChapter = null;
+  function jumpToChapter(ch) {
+    if (!engine) return;
+    if (_ensureChapter) _ensureChapter(ch);
+    var idx = chapterStart[ch];
+    if (idx == null) idx = Coords.resolve(tokens, { chapter: ch, para: 0, word: 0 }, chapterStart);
+    if (idx < 0) idx = 0;
+    engine.seek(idx);
+    if (paged) {
+      if (currentView === 'rsvp') paged.follow(idx); else paged.goToIndex(idx);
+    }
+  }
+
 
   var paged = null, currentView = 'read';
   // Tap interaction state: 'idle' (normal) or 'armed' (box outlined, prompt up).
@@ -214,19 +423,14 @@
     var pageEl = document.getElementById('page');
     paged = new Paged(pageEl, {
       onWordTap: handlePageTap,
-      cacheId: (src === 'user' ? 'u:' : '') + bookId,
-      cacheLoad: function (key) { return Store.getPageCache(key); },
-      cacheSave: function (key, pages) { Store.savePageCache(key, pages); },
       onPageChange: function (info) {
-        document.getElementById('pageNum').textContent =
-          'page ' + info.page + ' of ' + info.total;
-        if (paged && paged.words && paged.pages[paged.current]) {
-          var fw = paged.words[paged.pages[paged.current].startWord];
-          if (fw) setTopChapter(fw.chapter);
-        }
+        var meta = document.getElementById('pageNum');
+        if (meta) meta.textContent = info.pct + '% read';
+        setTopChapter(info.chapter);
       }
     });
     paged.enableTaps();
+    // Window the opening screen at the resumed position. No full-book build.
     paged.buildWhenReady(tokens, function () {
       paged.goToIndex(engine ? engine.index : 0);
     });
@@ -239,12 +443,13 @@
     setupTapPrompt();
     setupPaneToggle();
 
+    // On resize the page box changes, so re-window the current screen. Windowed
+    // layout means this is one screen of work, not a re-pagination of the book.
     var rzTimer = null;
     window.addEventListener('resize', function () {
       clearTimeout(rzTimer);
       rzTimer = setTimeout(function () {
         var anchor = engine ? engine.index : 0;
-        paged.build(tokens, true); // force: viewport actually changed
         paged.goToIndex(anchor);
         if (currentView === 'rsvp') paged.follow(anchor);
       }, 200);
@@ -474,7 +679,7 @@
     els.word.style.transform = 'translate(' + (-shiftX) + 'px, ' + (-shiftY) + 'px)';
     if (snap) updateProgressLabel(snap);
     // Keep the paged panel in lockstep with the speed-read word.
-    if (currentView === 'rsvp' && paged && paged.pages && paged.pages.length) {
+    if (currentView === 'rsvp' && paged) {
       paged.follow(snap ? snap.index : engine.index);
     }
   }
@@ -507,24 +712,39 @@
   }
 
   function updateProgressLabel(snap) {
-    els.progress.innerHTML = 'word ' + (snap.index + 1).toLocaleString() +
-      ' of ' + snap.total.toLocaleString() +
-      ' · <span class="chapter-now">' + chapterName(snap.chapter) + '</span>';
-    els.scrub.value = String(snap.index);
-    if (els.chapterSel.value !== String(snap.chapter)) els.chapterSel.value = String(snap.chapter);
+    // Until the whole book is tokenized, the global token count (snap.total) is
+    // only a partial count, so a % would be wrong. Per the chosen behaviour, we
+    // show the chapter name during that window and switch to an exact % once
+    // fullyLoaded. Position within the book is always anchored by coordinate, so
+    // reading/resuming is correct regardless of what the readout displays.
     setTopChapter(snap.chapter);
-    var pct = snap.total ? Math.round(snap.index / snap.total * 100) : 0;
-    els.pct.textContent = pct + '%';
-    if (engine) els.timeleft.textContent = 'time left ' + fmtTime(engine.timeLeftMs());
+    if (els.chapterSel.value !== String(snap.chapter)) els.chapterSel.value = String(snap.chapter);
+
+    if (fullyLoaded) {
+      els.progress.innerHTML = 'word ' + (snap.index + 1).toLocaleString() +
+        ' of ' + snap.total.toLocaleString() +
+        ' · <span class="chapter-now">' + chapterName(snap.chapter) + '</span>';
+      els.scrub.value = String(snap.index);
+      var pct = snap.total ? Math.round(snap.index / snap.total * 100) : 0;
+      els.pct.textContent = pct + '%';
+      els.timeleft.textContent = engine ? 'time left ' + fmtTime(engine.timeLeftMs()) : '';
+    } else {
+      els.progress.innerHTML = '<span class="chapter-now">' + chapterName(snap.chapter) + '</span>';
+      els.scrub.value = String(snap.index);
+      els.pct.textContent = '';            // exact % deferred until load completes
+      els.timeleft.textContent = 'loading…';
+    }
   }
 
   function onState(snap) {
     els.play.textContent = snap.playing ? 'Pause' : (snap.index >= snap.total - 1 ? 'Replay' : 'Play');
     updateProgressLabel(snap);
-    // Debounced progress save
+    // Debounced progress save — stored as a CONTENT COORDINATE so it resolves on
+    // reopen without needing the whole book tokenized first.
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      Store.saveProgress(bookId, snap.index, snap.chapter, currentView);
+      var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
+      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct);
     }, 400);
   }
 
@@ -537,8 +757,8 @@
 
     els.scrub.addEventListener('input', function () { engine.seek(parseInt(els.scrub.value, 10)); });
     els.chapterSel.addEventListener('change', function () {
-      engine.seekChapter(parseInt(els.chapterSel.value, 10));
-      if (paged && currentView === 'read') paged.goToIndex(engine.index);
+      var ch = parseInt(els.chapterSel.value, 10);
+      jumpToChapter(ch);
     });
 
     function setWpm(v) {
@@ -586,7 +806,10 @@
     });
 
     function saveNow() {
-      if (engine) Store.saveProgress(bookId, engine.index, engine.snapshot().chapter, currentView);
+      if (!engine) return;
+      var snap = engine.snapshot();
+      var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
+      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct);
     }
     window.addEventListener('beforeunload', saveNow);
     window.addEventListener('pagehide', saveNow);

@@ -1,12 +1,16 @@
-/* paged.js — a normal paged reader that shares the RSVP token stream.
+/* paged.js — windowed-lazy paged reader sharing the RSVP token stream.
  *
- * Key idea: it renders the SAME tokens the engine plays, each tagged with its
- * global token index, so tapping a word maps exactly to an engine index. Pages
- * are built by filling the page element with words until it overflows, then
- * starting a new page — giving clean, device-fitted pages with real tap targets.
+ * Unlike the old version, this NEVER paginates the whole book. It lays out only
+ * the screen the reader is currently on, measured against the real page box, and
+ * paginates the adjacent screen on demand when turning pages or when the RSVP
+ * word crosses off the visible screen. Load time is therefore constant — a
+ * 1,000-word book and a 1,000,000-word book open equally fast.
  *
- * Exposes window.Paged with: build(tokens), goToIndex(i), onWordTap(cb),
- * next(), prev(), pageInfo().
+ * Position is expressed purely as a TOKEN INDEX (and a derived %). There is no
+ * page-count, no pages[] array, and no pagination cache.
+ *
+ * Exposes window.Paged with: build(tokens), goToIndex(i), follow(i), highlight(i),
+ * next(), prev(), enableTaps(), onWordTap(cb), pageInfo(), locationPct().
  */
 (function (root) {
   'use strict';
@@ -15,281 +19,76 @@
     opts = opts || {};
     this.pageEl = pageEl;
     this.tokens = [];
-    this.pages = [];          // each page = { start, end } token-index range
-    this.current = 0;
+    this.startPos = 0;          // first token position laid out on the screen
+    this.endPos = 0;            // one past the last token position on the screen
+    this.firstIndex = 0;        // first engine index visible on the screen
+    this.lastIndex = 0;         // last engine index visible on the screen
     this.onTap = opts.onWordTap || function () {};
     this.onPageChange = opts.onPageChange || function () {};
-    // Optional pagination cache: cacheLoad(key)→pages|null, cacheSave(key,pages).
-    this.cacheLoad = opts.cacheLoad || function () { return null; };
-    this.cacheSave = opts.cacheSave || function () {};
-    this.cacheId = opts.cacheId || '';   // book identity for the cache key
+    this._builtH = 0; this._builtW = 0;
   }
 
-  // Build a cache key from the book identity, word count, and box dimensions.
-  Paged.prototype._cacheKey = function (maxH, maxW, nWords) {
-    return this.cacheId + '|' + nWords + '|' + maxW + 'x' + maxH;
-  };
-
-  // Reconstruct display words from tokens, re-joining hyphen-split long words so
-  // the reader shows natural text while still mapping taps to token indices.
-  Paged.prototype._displayWords = function () {
-    var words = [];
+  // ---- display words are produced LAZILY, one per token position, on demand.
+  // A "display word" merges any soft-hyphen continuation chunks (rare; only for
+  // words longer than the tokenizer's maxWordLength) back into one tappable word
+  // that still maps to the FIRST chunk's engine index. We never materialize the
+  // whole book — _wordAt(pos) builds just the word starting at token `pos` and
+  // returns { word, nextPos } so callers can walk a screen's worth and stop.
+  //
+  // pos === token index in the common case (no splitting). When a merge spans
+  // several tokens, the merged word occupies one display slot but advances
+  // nextPos past all its chunks.
+  Paged.prototype._wordAt = function (pos) {
     var toks = this.tokens;
-    for (var i = 0; i < toks.length; i++) {
-      var t = toks[i];
-      var text = t.text;
-      var startIndex = i;
-      // Merge soft-hyphen continuation chunks back into one display word.
-      while (/\u00AD$/.test(toks[i] && toks[i].text)) {
-        i++;
-        if (i < toks.length) text = text.replace(/\u00AD$/, '') + toks[i].text;
-        else break;
-      }
-      words.push({
-        text: text.replace(/\u00AD/g, ''),
-        index: startIndex,      // engine index to seek to on tap
-        para: t.para,
-        chapter: t.chapter,
-        paraEnd: toks[i] ? toks[i].paraEnd : t.paraEnd
-      });
+    var t = toks[pos];
+    if (!t) return null;
+    var text = t.text;
+    var i = pos;
+    while (/\u00AD$/.test(toks[i] && toks[i].text)) {
+      i++;
+      if (i < toks.length) text = text.replace(/\u00AD$/, '') + toks[i].text;
+      else break;
     }
-    return words;
+    return {
+      word: { text: text.replace(/\u00AD/g, ''), index: pos, para: t.para, chapter: t.chapter },
+      nextPos: i + 1
+    };
   };
 
-  // Paginate: lay words into the page element until it overflows height, record
-  // page boundaries, repeat. Measures against the real element size.
-  // Returns true if it paginated, false if the element had no height yet.
-  Paged.prototype._displayWordsCached = function () {
-    if (!this._wordsCache) this._wordsCache = this._displayWords();
-    return this._wordsCache;
+  // Map an engine token index → the token position that begins its display word.
+  // Because a display word maps to its FIRST chunk's index and chunks are
+  // contiguous, the position that begins the word containing `idx` is `idx`
+  // itself unless `idx` lands on a continuation chunk — in which case we walk
+  // back over the soft-hyphen run (at most a handful of chars; effectively never
+  // hit with default settings). O(1) amortized, no full-book scan.
+  Paged.prototype._wordPosOfIndex = function (idx) {
+    var toks = this.tokens;
+    idx = Math.max(0, Math.min(toks.length - 1, idx | 0));
+    var p = idx;
+    while (p > 0 && toks[p - 1] && /\u00AD$/.test(toks[p - 1].text)) p--;
+    return p;
   };
 
-  Paged.prototype.build = function (tokens, force) {
-    if (tokens) this.tokens = tokens;
+  // ---- core: lay out one screen FORWARD starting at token position `fromPos`.
+  // Walks tokens via _wordAt (lazy, no precomputed array), filling the page box
+  // until the next word would overflow its height, then stops. Records the token
+  // positions [startPos, endPos) and the first/last engine indices on screen.
+  // Returns true unless the box has no height yet.
+  Paged.prototype._layoutForward = function (fromPos) {
     var el = this.pageEl;
     var maxH = el.clientHeight;
-    var maxW = el.clientWidth;
-    if (!maxH || maxH < 40) return false; // not laid out yet; caller retries
-    // Reuse existing pagination if dimensions are unchanged (big speed win).
-    if (!force && this.pages.length && this._builtH === maxH && this._builtW === maxW) {
-      this.renderPage(this.current);
-      return true;
-    }
-    this.words = this._displayWordsCached();
-    // Try a saved pagination for this book + size before the expensive measure.
-    var ckey = this._cacheKey(maxH, maxW, this.words.length);
-    if (!force) {
-      var cached = null;
-      try { cached = this.cacheLoad(ckey); } catch (e) { cached = null; }
-      if (cached && cached.length) {
-        this.pages = cached;
-        this._builtH = maxH; this._builtW = maxW;
-        if (this.current >= this.pages.length) this.current = this.pages.length - 1;
-        if (this.current < 0) this.current = 0;
-        this.renderPage(this.current);
-        return true;
-      }
-    }
-    this.pages = [];
-    this._builtH = maxH; this._builtW = maxW;
-    // Build paragraph blocks, then fill pages by appending blocks/words.
-    el.innerHTML = '';
-    var pageStartWord = 0;
-    var wi = 0;
-    var self = this;
-
-    function newParagraph() {
-      var p = document.createElement('p');
-      p.className = 'pg-para';
-      el.appendChild(p);
-      return p;
-    }
-
-    var curPara = null;
-    var lastPara = -1;
-    function commitPage(endWord) {
-      self.pages.push({
-        startWord: pageStartWord,
-        endWord: endWord,
-        start: self.words[pageStartWord] ? self.words[pageStartWord].index : 0
-      });
-    }
-
-    while (wi < this.words.length) {
-      var w = this.words[wi];
-      if (w.para !== lastPara) { curPara = newParagraph(); lastPara = w.para; }
-      var span = document.createElement('span');
-      span.className = 'pg-word';
-      span.textContent = w.text + ' ';
-      span.dataset.index = w.index;
-      curPara.appendChild(span);
-
-      if (el.scrollHeight > maxH) {
-        // This word overflowed — remove it, close the page here.
-        curPara.removeChild(span);
-        if (!curPara.childNodes.length) el.removeChild(curPara);
-        commitPage(wi);
-        // Reset for next page.
-        el.innerHTML = '';
-        pageStartWord = wi;
-        lastPara = -1;
-        curPara = null;
-        continue; // re-place this same word on the fresh page
-      }
-      wi++;
-    }
-    commitPage(this.words.length);
-    el.innerHTML = '';
-    if (this.current >= this.pages.length) this.current = this.pages.length - 1;
-    // Save this layout so the next open at the same size is instant.
-    try { this.cacheSave(this._cacheKey(maxH, maxW, this.words.length), this.pages); } catch (e) {}
-    this.renderPage(this.current);
-    return true;
-  };
-
-  // Progressive pagination for large books: paginate in time-sliced chunks so
-  // the main thread stays responsive, and render the page containing
-  // targetIndex as soon as it's known (so the reader shows the right page fast
-  // instead of waiting for the whole book). onReady(found) fires when the target
-  // page is rendered; onComplete fires when the entire book is paginated.
-  Paged.prototype.buildProgressive = function (targetIndex, onReady, onComplete) {
-    var el = this.pageEl;
-    var maxH = el.clientHeight, maxW = el.clientWidth;
     if (!maxH || maxH < 40) return false;
-    var self = this;
-    this.words = this._displayWordsCached();
-    this.pages = [];
-    this._builtH = maxH; this._builtW = maxW;
-    el.innerHTML = '';
-    var pageStartWord = 0, wi = 0, curPara = null, lastPara = -1;
-    var readyFired = false;
-    targetIndex = targetIndex || 0;
+    var toks = this.tokens;
+    fromPos = Math.max(0, Math.min(toks.length, fromPos | 0));
 
-    function newParagraph() {
-      var p = document.createElement('p'); p.className = 'pg-para';
-      el.appendChild(p); return p;
-    }
-    function commitPage(endWord) {
-      self.pages.push({
-        startWord: pageStartWord, endWord: endWord,
-        start: self.words[pageStartWord] ? self.words[pageStartWord].index : 0
-      });
-    }
-    // Does the page just committed contain the target token index?
-    function pageHasTarget(pageObj) {
-      var s = self.words[pageObj.startWord] ? self.words[pageObj.startWord].index : 0;
-      var e = self.words[pageObj.endWord - 1] ? self.words[pageObj.endWord - 1].index : Infinity;
-      return targetIndex >= s && targetIndex <= e;
-    }
-
-    // Process a slice of words within a time budget, then yield.
-    function slice() {
-      var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      while (wi < self.words.length) {
-        var w = self.words[wi];
-        if (w.para !== lastPara) { curPara = newParagraph(); lastPara = w.para; }
-        var span = document.createElement('span');
-        span.className = 'pg-word';
-        span.textContent = w.text + ' ';
-        span.dataset.index = w.index;
-        curPara.appendChild(span);
-        if (el.scrollHeight > maxH) {
-          curPara.removeChild(span);
-          if (!curPara.childNodes.length) el.removeChild(curPara);
-          commitPage(wi);
-          var justBuilt = self.pages[self.pages.length - 1];
-          el.innerHTML = ''; pageStartWord = wi; lastPara = -1; curPara = null;
-          // If this page holds the target, render it now and let the user read.
-          if (!readyFired && pageHasTarget(justBuilt)) {
-            readyFired = true;
-            self.current = self.pages.length - 1;
-            // Defer the rest so the render paints first.
-            self._renderKnownPage(self.current);
-            if (onReady) onReady(true);
-            setTimeout(continueRest, 16);
-            return; // exit slice; continueRest will finish paginating
-          }
-          // Time-box this slice to keep the thread responsive.
-          var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-          if (t1 - t0 > 12) { setTimeout(slice, 0); return; }
-          continue;
-        }
-        wi++;
-      }
-      // Reached the end during the initial pass.
-      commitPage(self.words.length);
-      el.innerHTML = '';
-      if (!readyFired) {
-        readyFired = true;
-        self.current = self._pageOfIndex(targetIndex);
-        self._renderKnownPage(self.current);
-        if (onReady) onReady(true);
-      }
-      if (onComplete) onComplete();
-    }
-
-    // After the target page is shown, finish paginating the remainder off the
-    // critical path, in time-sliced chunks. We must re-lay-out from pageStartWord
-    // because the visible page was rendered into el.
-    function continueRest() {
-      el.innerHTML = ''; lastPara = -1; curPara = null;
-      (function restSlice() {
-        var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-        while (wi < self.words.length) {
-          var w = self.words[wi];
-          if (w.para !== lastPara) { curPara = newParagraph(); lastPara = w.para; }
-          var span = document.createElement('span');
-          span.className = 'pg-word';
-          span.textContent = w.text + ' ';
-          span.dataset.index = w.index;
-          curPara.appendChild(span);
-          if (el.scrollHeight > maxH) {
-            curPara.removeChild(span);
-            if (!curPara.childNodes.length) el.removeChild(curPara);
-            commitPage(wi);
-            el.innerHTML = ''; pageStartWord = wi; lastPara = -1; curPara = null;
-            var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-            if (t1 - t0 > 12) { setTimeout(restSlice, 0); return; }
-            continue;
-          }
-          wi++;
-        }
-        commitPage(self.words.length);
-        // Restore the visible page (we scribbled in el while measuring).
-        self._renderKnownPage(self.current);
-        if (onComplete) onComplete();
-      })();
-    }
-
-    slice();
-    return true;
-  };
-
-  // Render a page we've already committed, without re-measuring.
-  Paged.prototype._renderKnownPage = function (i) {
-    this.renderPage(i);
-  };
-
-  // Build with retry: poll until the element has real height (handles fonts
-  // still loading or the view being momentarily hidden). cb runs once built.
-  Paged.prototype.buildWhenReady = function (tokens, cb) {
-    var self = this;
-    var tries = 0;
-    (function attempt() {
-      if (self.build(tokens)) { if (cb) cb(); return; }
-      if (tries++ < 40) setTimeout(attempt, 50); // up to ~2s
-    })();
-  };
-
-  Paged.prototype.renderPage = function (n) {
-    n = Math.max(0, Math.min(this.pages.length - 1, n));
-    this.current = n;
-    var page = this.pages[n];
-    var el = this.pageEl;
     el.innerHTML = '';
     var lastPara = -1, curPara = null;
-    for (var i = page.startWord; i < page.endWord; i++) {
-      var w = this.words[i];
+    var pos = fromPos;
+    var firstIdx = -1, lastIdx = -1;
+    while (pos < toks.length) {
+      var dw = this._wordAt(pos);
+      if (!dw) break;
+      var w = dw.word;
       if (w.para !== lastPara) {
         curPara = document.createElement('p');
         curPara.className = 'pg-para';
@@ -301,57 +100,113 @@
       span.textContent = w.text + ' ';
       span.dataset.index = w.index;
       curPara.appendChild(span);
+      if (el.scrollHeight > maxH) {
+        curPara.removeChild(span);
+        if (!curPara.childNodes.length) el.removeChild(curPara);
+        break;
+      }
+      if (firstIdx < 0) firstIdx = w.index;
+      lastIdx = w.index;
+      pos = dw.nextPos;
     }
+    // Guarantee progress: show at least one word even if it alone overflows.
+    if (pos === fromPos && fromPos < toks.length) {
+      var one = this._wordAt(fromPos);
+      pos = one ? one.nextPos : fromPos + 1;
+      firstIdx = one ? one.word.index : fromPos;
+      lastIdx = firstIdx;
+    }
+    this.startPos = fromPos;
+    this.endPos = pos;
+    this.firstIndex = firstIdx < 0 ? 0 : firstIdx;
+    this.lastIndex = lastIdx < 0 ? this.firstIndex : lastIdx;
+    this._builtH = maxH; this._builtW = el.clientWidth;
     this.onPageChange(this.pageInfo());
+    return true;
   };
 
-  // Mark a word active (the current reading position) and show its page.
+  // Lay out one screen BACKWARD ending just before token position `beforePos`.
+  // We estimate a start a screenful-and-a-bit back, lay forward, and adjust so
+  // the screen ends as close to (but not past) `beforePos` as possible.
+  Paged.prototype._layoutBackward = function (beforePos) {
+    if (beforePos <= 0) { this._layoutForward(0); return; }
+    var span = Math.max(8, (this.endPos - this.startPos) * 2);
+    var guess = Math.max(0, beforePos - span);
+    for (var attempt = 0; attempt < 6; attempt++) {
+      this._layoutForward(guess);
+      if (this.endPos >= beforePos) break;       // reached the turn-back point
+      guess = Math.min(beforePos - 1, this.endPos); // came up short — move start up
+    }
+    // If the fitted screen overshoots the boundary, clamp so we don't repeat
+    // content from the page we turned back from.
+    if (this.endPos > beforePos) this.endPos = beforePos;
+  };
+
+  // Public: (re)build at the current size. tokens optional. Renders the screen
+  // starting at the last-known start position (default 0).
+  Paged.prototype.build = function (tokens) {
+    if (tokens) this.tokens = tokens;
+    return this._layoutForward(this.startPos || 0);
+  };
+
+  // Build with retry until the box has real height (fonts/layout settling).
+  Paged.prototype.buildWhenReady = function (tokens, cb) {
+    var self = this;
+    if (tokens) this.tokens = tokens;
+    var tries = 0;
+    (function attempt() {
+      if (self._layoutForward(self.startPos || 0)) { if (cb) cb(); return; }
+      if (tries++ < 40) setTimeout(attempt, 50);
+    })();
+  };
+
+  // Show the screen containing a given engine token index.
+  Paged.prototype.goToIndex = function (idx) {
+    this._layoutForward(this._wordPosOfIndex(idx));
+  };
+
+  // Mark a word active and show its screen (used for explicit jumps/highlights).
   Paged.prototype.highlight = function (idx) {
     this.activeIndex = idx;
     this.goToIndex(idx);
   };
 
-  // Follow the RSVP word: turn the page when the word crosses onto a new page,
-  // but do NOT paint an active-word highlight (the moving paragraph is enough).
+  // Follow the RSVP word: only re-window when it crosses off the current screen.
+  // O(one screen) — never scans the book.
   Paged.prototype.follow = function (idx) {
     this.activeIndex = idx;
-    var pageOf = this._pageOfIndex(idx);
-    if (pageOf !== this.current) {
-      this.renderPage(pageOf);
+    if (idx < this.firstIndex || idx > this.lastIndex) {
+      this.goToIndex(idx);
     }
   };
 
-  Paged.prototype._pageOfIndex = function (idx) {
-    for (var i = 0; i < this.pages.length; i++) {
-      var p = this.pages[i];
-      var s = this.words[p.startWord] ? this.words[p.startWord].index : 0;
-      var e = this.words[p.endWord - 1] ? this.words[p.endWord - 1].index : Infinity;
-      if (idx >= s && idx <= e) return i;
-    }
-    return this.current;
+  Paged.prototype.next = function () {
+    if (this.endPos < this.tokens.length) this._layoutForward(this.endPos);
+  };
+  Paged.prototype.prev = function () {
+    if (this.startPos > 0) this._layoutBackward(this.startPos);
   };
 
-  Paged.prototype.next = function () { if (this.current < this.pages.length - 1) this.renderPage(this.current + 1); };
-  Paged.prototype.prev = function () { if (this.current > 0) this.renderPage(this.current - 1); };
-
-  // Show the page that contains a given engine token index.
-  Paged.prototype.goToIndex = function (idx) {
-    for (var i = 0; i < this.pages.length; i++) {
-      var p = this.pages[i];
-      var startIdx = this.words[p.startWord] ? this.words[p.startWord].index : 0;
-      var endIdx = this.words[p.endWord - 1] ? this.words[p.endWord - 1].index : Infinity;
-      if (idx >= startIdx && idx <= endIdx) { this.renderPage(i); return; }
-    }
-    this.renderPage(0);
+  // Position as a percentage of the book, by the first engine index on-screen.
+  Paged.prototype.locationPct = function () {
+    var total = this.tokens.length || 1;
+    return Math.round((this.firstIndex || 0) / total * 100);
   };
 
+  // Reported to onPageChange. No page totals — location is a %, plus the first
+  // on-screen chapter so the reader can update the header.
   Paged.prototype.pageInfo = function () {
-    return { page: this.current + 1, total: this.pages.length || 1 };
+    var t = this.tokens[this.startPos];
+    return {
+      pct: this.locationPct(),
+      startIndex: this.firstIndex || 0,
+      chapter: t ? t.chapter : 0,
+      atStart: (this.startPos || 0) <= 0,
+      atEnd: this.endPos >= this.tokens.length
+    };
   };
 
-  // Wire taps once. The whole page area reports taps; the reader decides whether
-  // it arms the prompt (first tap) or picks a start word (during 'picking').
-  // onTap receives (wordIndexOrNull): a word index if a word was hit, else null.
+  // Wire taps once: a word tap reports its engine index, a gap tap reports null.
   Paged.prototype.enableTaps = function () {
     var self = this;
     this.pageEl.addEventListener('click', function (e) {

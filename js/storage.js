@@ -13,7 +13,6 @@
   var KEY_LIBRARY  = PREFIX + 'library';     // user-uploaded books index
   var KEY_BOOK     = PREFIX + 'book:';       // + bookId (full parsed book)
   var KEY_LASTBOOK = PREFIX + 'lastbook';    // {id, src} of the most recent read
-  var KEY_PAGECACHE = PREFIX + 'pagecache:'; // + cacheKey (paginated layout)
 
   function lsGet(k, fallback) {
     try { var v = localStorage.getItem(k); return v == null ? fallback : JSON.parse(v); }
@@ -46,11 +45,20 @@
   }
   function saveSettings(s) { return lsSet(KEY_SETTINGS, s); }
 
-  // Progress per book: { index, chapter, updated }
+  // Progress per book: { coord:{chapter,para,word}, chapter, pct, mode, updated }.
+  // `coord` is the authoritative position — a content anchor (EPUB-CFI-style)
+  // that resolves on reopen the instant its chapter is tokenized, with no need to
+  // tokenize the prefix first. `chapter` is kept for quick display/sorting, and
+  // `pct` is a cached approximate progress percentage for the library badge (the
+  // reader computes it once the book is fully loaded; may be absent meanwhile).
   function getProgress(bookId) { return lsGet(KEY_PROGRESS + bookId, null); }
-  function saveProgress(bookId, index, chapter, mode) {
-    return lsSet(KEY_PROGRESS + bookId, { index: index, chapter: chapter,
-      mode: mode || 'read', updated: Date.now() });
+  function saveProgress(bookId, coord, chapter, mode, pct) {
+    var prev = lsGet(KEY_PROGRESS + bookId, null);
+    // Preserve a previously-known pct if this save doesn't supply one (e.g. saved
+    // during the brief pre-fully-loaded window).
+    var keepPct = (pct != null) ? pct : (prev && prev.pct != null ? prev.pct : null);
+    return lsSet(KEY_PROGRESS + bookId, { coord: coord, chapter: chapter,
+      pct: keepPct, mode: mode || 'read', updated: Date.now() });
   }
   function clearProgress(bookId) { lsDel(KEY_PROGRESS + bookId); }
 
@@ -103,43 +111,6 @@
     return n;
   }
 
-  // Pagination layout cache. Keyed by book + word-count + box dimensions, so a
-  // change in screen size or content rebuilds automatically. Stored compactly.
-  function getPageCache(key) {
-    return lsGet(KEY_PAGECACHE + key, null);
-  }
-  function savePageCache(key, pages) {
-    // Store a compact form: [startWord, endWord] pairs (start is derivable).
-    var compact = pages.map(function (p) { return [p.startWord, p.endWord, p.start]; });
-    try {
-      localStorage.setItem(KEY_PAGECACHE + key, JSON.stringify(compact));
-    } catch (e) {
-      // Quota exceeded — clear old page caches and retry once.
-      prunePageCaches(key);
-      try { localStorage.setItem(KEY_PAGECACHE + key, JSON.stringify(compact)); }
-      catch (e2) { /* give up; pagination still works, just not cached */ }
-    }
-  }
-  // Inflate compact cache back into {startWord, endWord, start} objects.
-  function inflatePageCache(key) {
-    var c = getPageCache(key);
-    if (!c || !c.length) return null;
-    return c.map(function (a) { return { startWord: a[0], endWord: a[1], start: a[2] }; });
-  }
-  // Remove all page caches except the one we're about to write (frees quota).
-  function prunePageCaches(keepKey) {
-    try {
-      var toRemove = [];
-      for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        if (k && k.indexOf(KEY_PAGECACHE) === 0 && k !== (KEY_PAGECACHE + keepKey)) {
-          toRemove.push(k);
-        }
-      }
-      toRemove.forEach(function (k) { localStorage.removeItem(k); });
-    } catch (e) {}
-  }
-
   var api = {
     requestPersistence: requestPersistence, isPersisted: isPersisted,
     getSettings: getSettings, saveSettings: saveSettings,
@@ -147,7 +118,6 @@
     setLastBook: setLastBook, getLastBook: getLastBook, clearLastBook: clearLastBook,
     getUserLibrary: getUserLibrary, getUserBook: getUserBook,
     saveUserBook: saveUserBook, deleteUserBook: deleteUserBook,
-    getPageCache: inflatePageCache, savePageCache: savePageCache,
     exportAll: exportAll, importAll: importAll
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -36,24 +36,19 @@
   function bookHref(id, kind) { return 'reader.html?book=' + encodeURIComponent(id) + '&src=' + kind; }
 
   // Sorting helpers ---------------------------------------------------------
-  // Title key: lowercase, drop a leading article so "The Great Gatsby" files
-  // under G, and strip leading non-letters so "_Moby_" etc. sort sensibly.
   function titleKey(b) {
     var t = (b.title || '').toLowerCase().trim();
-    t = t.replace(/^(the|a|an)\s+/, '');      // ignore leading article
-    t = t.replace(/^[^a-z0-9]+/, '');          // strip leading punctuation
+    t = t.replace(/^(the|a|an)\s+/, '');
+    t = t.replace(/^[^a-z0-9]+/, '');
     return t;
   }
-  // Author key: sort by surname (last whitespace-separated word), e.g.
-  // "Jane Austen" → "austen jane". Falls back to the whole string.
   function authorKey(b) {
     var a = (b.author || '').toLowerCase().trim();
-    if (!a) return '~';                         // empty authors sort last
+    if (!a) return '~';
     var parts = a.split(/\s+/);
     var surname = parts[parts.length - 1];
     return surname + ' ' + parts.slice(0, -1).join(' ');
   }
-  // Recency key: most recently read first (by saved progress timestamp).
   function recentKey(b) {
     var p = Store.getProgress(b.id);
     return p && p.updated ? p.updated : 0;
@@ -65,7 +60,7 @@
       arr.sort(function (a, b) { return authorKey(a).localeCompare(authorKey(b)) || titleKey(a).localeCompare(titleKey(b)); });
     } else if (mode === 'recent') {
       arr.sort(function (a, b) { return recentKey(b) - recentKey(a) || titleKey(a).localeCompare(titleKey(b)); });
-    } else { // title
+    } else {
       arr.sort(function (a, b) { return titleKey(a).localeCompare(titleKey(b)); });
     }
     return arr;
@@ -82,7 +77,10 @@
       card.setAttribute('role', 'button');
       var coverStyle = b.cover ? ' style="background-image:url(' + b.cover + ')"' : '';
       var progress = Store.getProgress(b.id);
-      var pct = progress && b.wordCount ? Math.round(progress.index / b.wordCount * 100) : 0;
+      // Progress is stored as a content coordinate plus a cached `pct` (computed
+      // by the reader once the book is fully loaded). Use that cached pct; if it
+      // isn't known yet, show no percentage rather than a wrong one.
+      var pct = progress && progress.pct != null ? progress.pct : null;
       card.innerHTML =
         (b._user ? '<button class="del" title="Remove" aria-label="Remove book">✕</button>' : '') +
         '<div class="cover"' + coverStyle + '></div>' +
@@ -90,7 +88,8 @@
         '<div class="meta">' +
           '<span>' + (b.wordCount ? b.wordCount.toLocaleString() + ' words' : '') + '</span>' +
           (b.sample ? '<span class="tag sample">sample</span>' : '') +
-          (progress ? '<span class="tag">' + pct + '% read</span>' : '') +
+          (pct != null ? '<span class="tag">' + pct + '% read</span>' :
+            (progress ? '<span class="tag">in progress</span>' : '')) +
         '</div>';
       card.querySelector('h3').textContent = b.title;
       card.querySelector('.author').textContent = b.author || '';
@@ -115,7 +114,6 @@
 
   var countEl = document.getElementById('libCount');
   var sortEl = document.getElementById('sortBy');
-  // Restore saved sort preference.
   try {
     var s0 = Store.getSettings();
     if (s0.librarySort) sortEl.value = s0.librarySort;
