@@ -127,29 +127,41 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   margin: 0 0 6px; letter-spacing: 0.01em;
 }
 .lib-head p { color: var(--fg-dim); margin: 0; font-size: 1.02rem; font-style: italic; }
-.search { width: 100%; margin: 22px 0; }
+/* Library controls: search + sort on one row, count below */
+.lib-controls { display: flex; gap: 12px; align-items: center; margin: 22px 0 8px; flex-wrap: wrap; }
+.search { flex: 1 1 240px; margin: 0; }
 .search input {
   width: 100%; padding: 12px 15px; font-size: 1.05rem; font-family: var(--font-body);
   background: var(--bg-2); color: var(--fg);
   border: 1px solid var(--line); border-radius: var(--radius);
 }
-.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.sort { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui);
+  font-size: 0.85rem; color: var(--fg-dim); }
+.sort select {
+  font-family: var(--font-ui); font-size: 0.9rem; padding: 9px 12px;
+  background: var(--bg-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer;
+}
+.lib-count { font-family: var(--font-ui); font-size: 0.8rem; color: var(--fg-dim);
+  margin: 0 0 16px; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .card {
   display: flex; flex-direction: column; text-align: left;
   background: var(--bg-2);
-  border: 1px solid var(--line); border-radius: var(--radius); padding: 18px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px;
   cursor: pointer; position: relative;
   box-shadow: 0 1px 0 var(--paper-edge), 0 2px 6px #0000001a;
   transition: transform .12s, box-shadow .12s;
 }
 .card:hover { transform: translateY(-3px); box-shadow: 0 3px 14px #00000026; border-color: var(--rubric); }
+/* Cover only renders when there's an actual image; empty covers collapse so
+   coverless cards stay compact (better for a large library). */
 .card .cover {
-  height: 110px; border-radius: var(--radius); margin-bottom: 14px;
+  height: 96px; border-radius: var(--radius); margin-bottom: 12px;
   background: var(--bg-3) center/cover no-repeat;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--rubric); font-size: 2.6rem; font-family: var(--font-body); font-weight: 600;
   border: 1px solid var(--line);
 }
+.card .cover:not([style]) { display: none; }
 .card h3 { margin: 0 0 3px; font-size: 1.18rem; font-weight: 600; }
 .card .author { color: var(--fg-dim); font-size: 0.92rem; font-style: italic; }
 .card .meta { margin-top: 12px; color: var(--fg-dim); font-size: 0.8rem;
