@@ -11,10 +11,12 @@
     var p;
     if (n <= 5) p = 1;
     else if (n <= 9) p = 2;
-    else if (n <= 13) p = 3;
-    else p = 4;
-    // Ensure no more than 9 letters trail the pivot, so the right side of the
-    // word never runs off the rail. If it would, shift the pivot rightward.
+    else if (n <= 10) p = 3;
+    // Words 11+ chars: place the pivot one letter left of centre for a better
+    // visual balance (the long tail otherwise pushes the word off to one side).
+    else p = Math.floor(n / 2) - 1;
+    // Safety: never leave more than 9 letters trailing the pivot, so the right
+    // side can't run off the rail.
     var maxTrailing = 9;
     if (n - 1 - p > maxTrailing) p = n - 1 - maxTrailing;
     return p;

@@ -122,6 +122,129 @@
     return true;
   };
 
+  // Progressive pagination for large books: paginate in time-sliced chunks so
+  // the main thread stays responsive, and render the page containing
+  // targetIndex as soon as it's known (so the reader shows the right page fast
+  // instead of waiting for the whole book). onReady(found) fires when the target
+  // page is rendered; onComplete fires when the entire book is paginated.
+  Paged.prototype.buildProgressive = function (targetIndex, onReady, onComplete) {
+    var el = this.pageEl;
+    var maxH = el.clientHeight, maxW = el.clientWidth;
+    if (!maxH || maxH < 40) return false;
+    var self = this;
+    this.words = this._displayWordsCached();
+    this.pages = [];
+    this._builtH = maxH; this._builtW = maxW;
+    el.innerHTML = '';
+    var pageStartWord = 0, wi = 0, curPara = null, lastPara = -1;
+    var readyFired = false;
+    targetIndex = targetIndex || 0;
+
+    function newParagraph() {
+      var p = document.createElement('p'); p.className = 'pg-para';
+      el.appendChild(p); return p;
+    }
+    function commitPage(endWord) {
+      self.pages.push({
+        startWord: pageStartWord, endWord: endWord,
+        start: self.words[pageStartWord] ? self.words[pageStartWord].index : 0
+      });
+    }
+    // Does the page just committed contain the target token index?
+    function pageHasTarget(pageObj) {
+      var s = self.words[pageObj.startWord] ? self.words[pageObj.startWord].index : 0;
+      var e = self.words[pageObj.endWord - 1] ? self.words[pageObj.endWord - 1].index : Infinity;
+      return targetIndex >= s && targetIndex <= e;
+    }
+
+    // Process a slice of words within a time budget, then yield.
+    function slice() {
+      var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      while (wi < self.words.length) {
+        var w = self.words[wi];
+        if (w.para !== lastPara) { curPara = newParagraph(); lastPara = w.para; }
+        var span = document.createElement('span');
+        span.className = 'pg-word';
+        span.textContent = w.text + ' ';
+        span.dataset.index = w.index;
+        curPara.appendChild(span);
+        if (el.scrollHeight > maxH) {
+          curPara.removeChild(span);
+          if (!curPara.childNodes.length) el.removeChild(curPara);
+          commitPage(wi);
+          var justBuilt = self.pages[self.pages.length - 1];
+          el.innerHTML = ''; pageStartWord = wi; lastPara = -1; curPara = null;
+          // If this page holds the target, render it now and let the user read.
+          if (!readyFired && pageHasTarget(justBuilt)) {
+            readyFired = true;
+            self.current = self.pages.length - 1;
+            // Defer the rest so the render paints first.
+            self._renderKnownPage(self.current);
+            if (onReady) onReady(true);
+            setTimeout(continueRest, 16);
+            return; // exit slice; continueRest will finish paginating
+          }
+          // Time-box this slice to keep the thread responsive.
+          var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+          if (t1 - t0 > 12) { setTimeout(slice, 0); return; }
+          continue;
+        }
+        wi++;
+      }
+      // Reached the end during the initial pass.
+      commitPage(self.words.length);
+      el.innerHTML = '';
+      if (!readyFired) {
+        readyFired = true;
+        self.current = self._pageOfIndex(targetIndex);
+        self._renderKnownPage(self.current);
+        if (onReady) onReady(true);
+      }
+      if (onComplete) onComplete();
+    }
+
+    // After the target page is shown, finish paginating the remainder off the
+    // critical path, in time-sliced chunks. We must re-lay-out from pageStartWord
+    // because the visible page was rendered into el.
+    function continueRest() {
+      el.innerHTML = ''; lastPara = -1; curPara = null;
+      (function restSlice() {
+        var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        while (wi < self.words.length) {
+          var w = self.words[wi];
+          if (w.para !== lastPara) { curPara = newParagraph(); lastPara = w.para; }
+          var span = document.createElement('span');
+          span.className = 'pg-word';
+          span.textContent = w.text + ' ';
+          span.dataset.index = w.index;
+          curPara.appendChild(span);
+          if (el.scrollHeight > maxH) {
+            curPara.removeChild(span);
+            if (!curPara.childNodes.length) el.removeChild(curPara);
+            commitPage(wi);
+            el.innerHTML = ''; pageStartWord = wi; lastPara = -1; curPara = null;
+            var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            if (t1 - t0 > 12) { setTimeout(restSlice, 0); return; }
+            continue;
+          }
+          wi++;
+        }
+        commitPage(self.words.length);
+        // Restore the visible page (we scribbled in el while measuring).
+        self._renderKnownPage(self.current);
+        if (onComplete) onComplete();
+      })();
+    }
+
+    slice();
+    return true;
+  };
+
+  // Render a page we've already committed, without re-measuring.
+  Paged.prototype._renderKnownPage = function (i) {
+    this.renderPage(i);
+  };
+
   // Build with retry: poll until the element has real height (handles fonts
   // still loading or the view being momentarily hidden). cb runs once built.
   Paged.prototype.buildWhenReady = function (tokens, cb) {

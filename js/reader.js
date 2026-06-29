@@ -107,8 +107,9 @@
 
     els.scrub.max = String(Math.max(0, tokens.length - 1));
 
-    // Build the paged reader from the same token stream.
-    setupPaged();
+    // Build the paged reader object + wire controls, but DEFER the heavy
+    // full-book pagination so the reader UI (word, controls) paints instantly.
+    setupPaged(true);
 
     // Resume position and mode
     var prog = Store.getProgress(bookId);
@@ -121,10 +122,44 @@
     } else {
       updateProgressLabel(engine.snapshot());
     }
-    if (paged) paged.goToIndex(engine.index);
     wireControls();
-    // Apply saved mode (defaults to read). switchView positions the page too.
-    switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
+
+    // Show the chosen view immediately. In speed-read mode the word is already
+    // visible (no pagination needed). Show a brief placeholder in the page area.
+    var startRsvp = (resumeMode === 'rsvp');
+    document.body.classList.toggle('mode-rsvp', startRsvp);
+    document.body.classList.toggle('mode-read', !startRsvp);
+    currentView = startRsvp ? 'rsvp' : 'read';
+    var pageEl = document.getElementById('page');
+    if (pageEl) pageEl.innerHTML =
+      '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">Loading\u2026</p>';
+    document.getElementById('pagedView').hidden = false;
+    document.getElementById('rsvpView').hidden = !startRsvp;
+    document.getElementById('mRead').setAttribute('aria-checked', String(!startRsvp));
+    document.getElementById('mRsvp').setAttribute('aria-checked', String(startRsvp));
+    var mPane = document.getElementById('mPane');
+    if (mPane) mPane.hidden = !startRsvp;
+
+    // Now do pagination AFTER the first paint. Progressive: as soon as the page
+    // containing our position is known, it renders — the rest builds in the
+    // background, so there's no long "Loading…" wait on big books.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        var started = paged.buildWhenReady ? true : false;
+        (function attempt(tries) {
+          var ok = paged.buildProgressive(engine.index,
+            function onReady() {
+              if (startRsvp) paged.follow(engine.index);
+            },
+            function onComplete() {
+              // Update the "page X of Y" total now that all pages exist.
+              if (paged.onPageChange) paged.onPageChange(paged.pageInfo());
+            }
+          );
+          if (!ok && tries < 40) setTimeout(function () { attempt(tries + 1); }, 50);
+        })(0);
+      });
+    });
   }
 
   var paged = null, currentView = 'read';
@@ -132,7 +167,7 @@
   var tapState = 'idle';
   var selectedIndex = null;   // word chosen while armed (null = none yet)
 
-  function setupPaged() {
+  function setupPaged(deferBuild) {
     var pageEl = document.getElementById('page');
     paged = new Paged(pageEl, {
       onWordTap: handlePageTap,
@@ -146,9 +181,11 @@
       }
     });
     paged.enableTaps();
-    paged.buildWhenReady(tokens, function () {
-      paged.goToIndex(engine ? engine.index : 0);
-    });
+    if (!deferBuild) {
+      paged.buildWhenReady(tokens, function () {
+        paged.goToIndex(engine ? engine.index : 0);
+      });
+    }
 
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
     document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
@@ -208,22 +245,28 @@
   function togglePane() {
     paneCollapsed = !paneCollapsed;
     var btn = document.getElementById('paneToggle');
-    document.body.classList.toggle('pane-collapsed', paneCollapsed);
     try {
       var s = Store.getSettings(); s.paneCollapsed = paneCollapsed; Store.saveSettings(s);
     } catch (e) {}
     if (!paneCollapsed && currentView === 'rsvp' && paged) {
-      // Reopening re-fits the strip, which can take a moment — show feedback
-      // and block repeat taps until it's done.
+      // Reopening re-fits the strip (can take a moment on big books). Show the
+      // loading state and let it PAINT (double rAF) before the heavy pagination
+      // blocks the thread, so the button visibly reacts to the tap.
       if (btn) { btn.textContent = '\u2026 loading'; btn.disabled = true; btn.classList.add('loading'); }
+      document.body.classList.add('pane-collapsed'); // keep strip hidden until built
       requestAnimationFrame(function () {
-        paged.buildWhenReady(tokens, function () {
-          paged.follow(engine ? engine.index : 0);
-          if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
-          applyPaneState();
+        requestAnimationFrame(function () {
+          document.body.classList.remove('pane-collapsed');
+          paged.buildWhenReady(tokens, function () {
+            paged.follow(engine ? engine.index : 0);
+            if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+            applyPaneState();
+          });
         });
       });
     } else {
+      // Hiding is instant.
+      document.body.classList.toggle('pane-collapsed', paneCollapsed);
       applyPaneState();
     }
   }
