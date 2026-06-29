@@ -7,5 +7,21 @@
     "cover": null,
     "source": "Project Gutenberg #11 — public domain",
     "sample": true
+  },
+  {
+    "id": "pg11",
+    "title": "Alice's Adventures in Wonderland",
+    "author": "Carroll, Lewis",
+    "wordCount": 26459,
+    "cover": null,
+    "source": "Project Gutenberg #11 — public domain"
+  },
+  {
+    "id": "pg1342",
+    "title": "Pride and Prejudice",
+    "author": "Jane Austen",
+    "wordCount": 127238,
+    "cover": null,
+    "source": "Project Gutenberg #1342 — public domain"
   }
 ]
