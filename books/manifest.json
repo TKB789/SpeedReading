@@ -1,5 +1,13 @@
 [
   {
+    "id": "pg2542",
+    "title": "A Doll's House : a play",
+    "author": "Henrik Ibsen",
+    "wordCount": 26466,
+    "cover": null,
+    "source": "Project Gutenberg #2542 — public domain"
+  },
+  {
     "id": "pg98",
     "title": "A Tale of Two Cities",
     "author": "Dickens, Charles",
@@ -40,6 +48,14 @@
     "source": "Project Gutenberg #345 — public domain"
   },
   {
+    "id": "pg6593",
+    "title": "History of Tom Jones, a Foundling",
+    "author": "Fielding, Henry",
+    "wordCount": 350121,
+    "cover": null,
+    "source": "Project Gutenberg #6593 — public domain"
+  },
+  {
     "id": "pg1260",
     "title": "Jane Eyre: An Autobiography",
     "author": "Charlotte Brontë",
@@ -54,6 +70,14 @@
     "wordCount": 192511,
     "cover": null,
     "source": "Project Gutenberg #37106 — public domain"
+  },
+  {
+    "id": "pg2680",
+    "title": "Meditations",
+    "author": "Marcus Aurelius, Emperor of Rome",
+    "wordCount": 71957,
+    "cover": null,
+    "source": "Project Gutenberg #2680 — public domain"
   },
   {
     "id": "pg145",
@@ -88,6 +112,14 @@
     "source": "Project Gutenberg #1513 — public domain"
   },
   {
+    "id": "pg74",
+    "title": "The Adventures of Tom Sawyer, Complete",
+    "author": "Twain, Mark",
+    "wordCount": 70730,
+    "cover": null,
+    "source": "Project Gutenberg #74 — public domain"
+  },
+  {
     "id": "pg28054",
     "title": "The Brothers Karamazov",
     "author": "Dostoyevsky, Fyodor",
@@ -102,6 +134,14 @@
     "wordCount": 962470,
     "cover": null,
     "source": "Project Gutenberg #100 — public domain"
+  },
+  {
+    "id": "pg3296",
+    "title": "The Confessions of St. Augustine",
+    "author": "Augustine, of Hippo, Saint",
+    "wordCount": 111795,
+    "cover": null,
+    "source": "Project Gutenberg #3296 — public domain"
   },
   {
     "id": "pg2160",
