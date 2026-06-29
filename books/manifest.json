@@ -8,11 +8,35 @@
     "source": "Project Gutenberg #11 — public domain"
   },
   {
+    "id": "pg2554",
+    "title": "Crime and Punishment",
+    "author": "Dostoyevsky, Fyodor",
+    "wordCount": 203414,
+    "cover": null,
+    "source": "Project Gutenberg #2554 — public domain"
+  },
+  {
+    "id": "pg2701",
+    "title": "Moby Dick; Or, The Whale",
+    "author": "Herman Melville",
+    "wordCount": 212796,
+    "cover": null,
+    "source": "Project Gutenberg #2701 — public domain"
+  },
+  {
     "id": "pg1342",
     "title": "Pride and Prejudice",
     "author": "Jane Austen",
     "wordCount": 127238,
     "cover": null,
     "source": "Project Gutenberg #1342 — public domain"
+  },
+  {
+    "id": "pg1513",
+    "title": "Romeo and Juliet",
+    "author": "William Shakespeare",
+    "wordCount": 25938,
+    "cover": null,
+    "source": "Project Gutenberg #1513 — public domain"
   }
 ]
