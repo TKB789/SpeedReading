@@ -53,26 +53,96 @@
   Store.requestPersistence();
 
   var engine = null, tokens = null, book = null, saveTimer = null;
+  // Loading-state machinery: an AbortController so we can cancel a slow fetch,
+  // plus timers that escalate the message ("taking longer…") and eventually
+  // give up. loadDone() clears all of this once the book is ready or has failed.
+  var loadController = null;
+  var slowTimer = null, giveUpTimer = null, loadFinished = false;
+  var LIBRARY_URL = 'index.html?home';
+
+  // Inject a persistent "Back to library" escape hatch into the loading screen
+  // so the user is never trapped. It sits in the paged panel (the default view)
+  // and is shown immediately on every load attempt.
+  function showLoadingEscape() {
+    var pageEl = document.getElementById('page');
+    if (!pageEl || document.getElementById('loadEscape')) return;
+    var box = document.createElement('div');
+    box.id = 'loadEscape';
+    box.style.cssText = 'text-align:center;padding:24px 12px;color:var(--fg-dim)';
+    box.innerHTML =
+      '<p id="loadEscapeMsg" class="pg-para" style="text-indent:0;font-style:italic">Loading this book…</p>' +
+      '<p class="pg-para" style="text-indent:0;margin-top:14px">' +
+        '<a id="loadEscapeLink" href="' + LIBRARY_URL + '" ' +
+        'style="display:inline-block;padding:8px 16px;border:1px solid var(--rubric);' +
+        'border-radius:8px;color:var(--rubric);text-decoration:none">\u2190 Back to library</a>' +
+      '</p>';
+    pageEl.innerHTML = '';
+    pageEl.appendChild(box);
+    // Tapping the link aborts any in-flight fetch before navigating, so we don't
+    // leave a request dangling (the navigation alone would also kill it).
+    var link = document.getElementById('loadEscapeLink');
+    if (link) link.addEventListener('click', function () { abortLoad(); });
+  }
+
+  function setLoadingMsg(msg) {
+    var el = document.getElementById('loadEscapeMsg');
+    if (el) el.textContent = msg;
+    if (els.idle) els.idle.textContent = msg;
+  }
+
+  function abortLoad() {
+    if (loadController) { try { loadController.abort(); } catch (e) {} }
+    clearTimeout(slowTimer); clearTimeout(giveUpTimer);
+  }
+
+  // Called once the book is parsed/tokenized and the reader is live. Removes the
+  // escape box and stops the slow/timeout timers.
+  function loadDone() {
+    loadFinished = true;
+    clearTimeout(slowTimer); clearTimeout(giveUpTimer);
+    var box = document.getElementById('loadEscape');
+    if (box && box.parentNode) box.parentNode.removeChild(box);
+  }
 
   function loadBook() {
+    showLoadingEscape();
+    setLoadingMsg('Loading this book…');
+
+    // Escalate the message if it's slow, and hard-fail if it truly hangs.
+    slowTimer = setTimeout(function () {
+      if (!loadFinished) setLoadingMsg('Still loading — large books can take a few seconds. You can go back to the library anytime.');
+    }, 4000);
+    giveUpTimer = setTimeout(function () {
+      if (!loadFinished) { abortLoad(); fail('This book is taking too long to load. Try again, or pick another from the library.'); }
+    }, 25000);
+
     if (src === 'user') {
       var b = Store.getUserBook(bookId);
       if (!b) return fail('That uploaded book is no longer in this browser.');
-      return setup(b);
+      // Defer setup one tick so the escape UI paints before tokenize/pagination
+      // (which are synchronous and block the thread) kick in.
+      return setTimeout(function () { setup(b); }, 0);
     }
-    fetch('books/' + encodeURIComponent(bookId) + '.json')
+
+    loadController = ('AbortController' in window) ? new AbortController() : null;
+    var fetchOpts = loadController ? { signal: loadController.signal } : {};
+    fetch('books/' + encodeURIComponent(bookId) + '.json', fetchOpts)
       .then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
-      .then(setup)
-      .catch(function () { fail('Could not load that book.'); });
+      .then(function (b) { setTimeout(function () { setup(b); }, 0); })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return; // user left on purpose
+        fail('Could not load that book.');
+      });
   }
   function fail(msg) {
+    loadDone();
     els.title.textContent = 'Unavailable';
     if (els.idle) els.idle.textContent = msg;
     // Also show it in the paged panel, which is the visible view by default.
     var pageEl = document.getElementById('page');
     if (pageEl) pageEl.innerHTML = '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">' +
       msg + '</p><p class="pg-para" style="text-indent:0;color:var(--fg-dim)">' +
-      'Open a book from the <a href="index.html?home" style="color:var(--rubric)">Library</a>.</p>';
+      'Open a book from the <a href="' + LIBRARY_URL + '" style="color:var(--rubric)">Library</a>.</p>';
   }
 
   function setup(b) {
@@ -125,6 +195,8 @@
     wireControls();
     // Apply saved mode (defaults to read). switchView positions the page too.
     switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
+    // Reader is live — tear down the loading/escape UI and stop its timers.
+    loadDone();
   }
 
   var paged = null, currentView = 'read';
