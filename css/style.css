@@ -230,22 +230,13 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .reader-top { gap: 12px; }
 .reader-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
 .ri-title { font-family: var(--font-body); font-weight: 600; font-size: 1rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
-/* Push the chapter name to the right side of the header so the title gets the
-   space it needs. The separator travels with the chapter so it sits beside it. */
-.ri-sep { color: var(--rubric); flex: 0 0 auto; margin-left: auto; }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+.ri-sep { color: var(--rubric); flex: 0 0 auto; }
 .ri-chapter { font-family: var(--font-body); font-size: 0.92rem; color: var(--fg);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
-  flex: 0 1 auto; text-align: right; }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .ri-author { font-family: var(--font-body); font-style: italic; font-size: 0.82rem;
   color: var(--fg-dim); white-space: nowrap; flex: 0 0 auto; margin-left: 4px; }
-@media (max-width: 600px) {
-  .ri-author { display: none; }
-  /* On phones the title gets the lion's share; the chapter name keeps a small
-     right-aligned slot and ellipses if needed. */
-  .ri-title { max-width: 58vw; }
-  .ri-chapter { max-width: 30vw; }
-}
+@media (max-width: 600px) { .ri-author { display: none; } .ri-title { max-width: 34vw; } }
 
 /* Settings menu (anchored dropdown via full-screen backdrop) */
 .menu-backdrop { position: fixed; inset: 0; z-index: 60; background: transparent; }
@@ -266,18 +257,11 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
-  flex: 1; min-height: 0; min-width: 0; }
+  flex: 1; min-height: 0; }
 .page {
-  /* flex-basis 0 + min-width 0 makes the page size from the flex track only, not
-     from its content. Without min-width:0 a flex item refuses to shrink below its
-     widest content (e.g. a long chapter title), so the box width would change
-     from page to page. This keeps it fixed regardless of the text on the page. */
-  flex: 1 1 0; min-width: 0; width: 0;
-  height: 100%; overflow: hidden; box-sizing: border-box;
+  flex: 1; height: 100%; overflow: hidden;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 22px 24px; font-size: 1.16rem; line-height: 1.66;
-  /* Break any over-long token so it can never force the box wider. */
-  overflow-wrap: break-word; word-break: break-word;
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
