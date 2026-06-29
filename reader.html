@@ -113,5 +113,61 @@
 <script src="js/rsvp.js?v=1782705517"></script>
 <script src="js/paged.js?v=1782705517"></script>
 <script src="js/reader.js?v=1782705517"></script>
+
+<!-- Screen Wake Lock: keeps the phone awake during speed-reading -->
+<script>
+(function () {
+  if (!('wakeLock' in navigator)) return; // unsupported (older browsers / non-HTTPS)
+
+  let wakeLock = null;
+  let wantLock = false; // tracks whether we *should* be holding a lock
+
+  async function acquire() {
+    wantLock = true;
+    if (wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) {
+      // Request can reject if the page isn't visible or is denied; ignore.
+      wakeLock = null;
+    }
+  }
+
+  async function release() {
+    wantLock = false;
+    if (wakeLock) {
+      try { await wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+  }
+
+  // The OS auto-releases the lock when the tab is hidden. Re-acquire on return
+  // if we were meant to be holding it.
+  document.addEventListener('visibilitychange', () => {
+    if (wantLock && document.visibilityState === 'visible') acquire();
+  });
+
+  // Hook into the existing Play/Pause button. The button's label flips between
+  // "Play" and "Pause", so read its text to decide which way it's going.
+  const playBtn = document.getElementById('play');
+  if (playBtn) {
+    playBtn.addEventListener('click', () => {
+      // Defer one tick so we read the label *after* rsvp.js updates it.
+      setTimeout(() => {
+        const label = (playBtn.textContent || '').trim().toLowerCase();
+        if (label.startsWith('pause') || label.startsWith('stop')) {
+          acquire();
+        } else {
+          release();
+        }
+      }, 0);
+    });
+  }
+
+  // Safety net: drop the lock when leaving the page.
+  window.addEventListener('pagehide', release);
+})();
+</script>
 </body>
 </html>
