@@ -27,18 +27,34 @@ const path = require('path');
 const https = require('https');
 const P = require('./js/parser.js');
 
-function fetchText(url) {
+function fetchText(url, redirects) {
+  redirects = redirects || 0;
   return new Promise(function (resolve, reject) {
-    https.get(url, function (res) {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return resolve(fetchText(res.headers.location));
+    if (redirects > 5) { reject(new Error('Too many redirects for ' + url)); return; }
+    var opts = {
+      headers: {
+        // Gutenberg blocks requests with no User-Agent; send a normal one.
+        'User-Agent': 'Mozilla/5.0 (compatible; RSVPReaderBot/1.0)',
+        'Accept': 'text/plain,*/*'
       }
-      if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode + ' for ' + url)); return; }
+    };
+    https.get(url, opts, function (res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume(); // drain
+        return resolve(fetchText(res.headers.location, redirects + 1));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error('HTTP ' + res.statusCode + ' for ' + url));
+        return;
+      }
       var data = '';
       res.setEncoding('utf8');
       res.on('data', function (d) { data += d; });
       res.on('end', function () { resolve(data); });
-    }).on('error', reject);
+    }).on('error', function (e) {
+      reject(new Error((e && e.message) ? e.message : ('network error for ' + url)));
+    });
   });
 }
 
@@ -64,13 +80,16 @@ async function getGutenbergText(gid) {
   // Try the common plain-text URL patterns in order.
   var urls = [
     'https://www.gutenberg.org/cache/epub/' + gid + '/pg' + gid + '.txt',
+    'https://www.gutenberg.org/ebooks/' + gid + '.txt.utf-8',
     'https://www.gutenberg.org/files/' + gid + '/' + gid + '-0.txt',
     'https://www.gutenberg.org/files/' + gid + '/' + gid + '.txt'
   ];
+  var errors = [];
   for (var i = 0; i < urls.length; i++) {
     try { return await fetchText(urls[i]); }
-    catch (e) { if (i === urls.length - 1) throw e; }
+    catch (e) { errors.push(urls[i] + ' → ' + e.message); }
   }
+  throw new Error('All download URLs failed for #' + gid + ':\n  ' + errors.join('\n  '));
 }
 
 function writeBook(book, coverFile) {
