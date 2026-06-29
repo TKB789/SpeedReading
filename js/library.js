@@ -35,6 +35,42 @@
 
   function bookHref(id, kind) { return 'reader.html?book=' + encodeURIComponent(id) + '&src=' + kind; }
 
+  // Sorting helpers ---------------------------------------------------------
+  // Title key: lowercase, drop a leading article so "The Great Gatsby" files
+  // under G, and strip leading non-letters so "_Moby_" etc. sort sensibly.
+  function titleKey(b) {
+    var t = (b.title || '').toLowerCase().trim();
+    t = t.replace(/^(the|a|an)\s+/, '');      // ignore leading article
+    t = t.replace(/^[^a-z0-9]+/, '');          // strip leading punctuation
+    return t;
+  }
+  // Author key: sort by surname (last whitespace-separated word), e.g.
+  // "Jane Austen" → "austen jane". Falls back to the whole string.
+  function authorKey(b) {
+    var a = (b.author || '').toLowerCase().trim();
+    if (!a) return '~';                         // empty authors sort last
+    var parts = a.split(/\s+/);
+    var surname = parts[parts.length - 1];
+    return surname + ' ' + parts.slice(0, -1).join(' ');
+  }
+  // Recency key: most recently read first (by saved progress timestamp).
+  function recentKey(b) {
+    var p = Store.getProgress(b.id);
+    return p && p.updated ? p.updated : 0;
+  }
+
+  function sortBooks(list, mode) {
+    var arr = list.slice();
+    if (mode === 'author') {
+      arr.sort(function (a, b) { return authorKey(a).localeCompare(authorKey(b)) || titleKey(a).localeCompare(titleKey(b)); });
+    } else if (mode === 'recent') {
+      arr.sort(function (a, b) { return recentKey(b) - recentKey(a) || titleKey(a).localeCompare(titleKey(b)); });
+    } else { // title
+      arr.sort(function (a, b) { return titleKey(a).localeCompare(titleKey(b)); });
+    }
+    return arr;
+  }
+
   function render(list) {
     grid.innerHTML = '';
     if (!list.length) { emptyEl.hidden = false; return; }
@@ -44,13 +80,12 @@
       card.className = 'card';
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
-      var initial = (b.title || '?').trim().charAt(0).toUpperCase();
       var coverStyle = b.cover ? ' style="background-image:url(' + b.cover + ')"' : '';
       var progress = Store.getProgress(b.id);
       var pct = progress && b.wordCount ? Math.round(progress.index / b.wordCount * 100) : 0;
       card.innerHTML =
         (b._user ? '<button class="del" title="Remove" aria-label="Remove book">✕</button>' : '') +
-        '<div class="cover"' + coverStyle + '>' + (b.cover ? '' : initial) + '</div>' +
+        '<div class="cover"' + coverStyle + '></div>' +
         '<h3></h3><div class="author"></div>' +
         '<div class="meta">' +
           '<span>' + (b.wordCount ? b.wordCount.toLocaleString() + ' words' : '') + '</span>' +
@@ -78,21 +113,39 @@
     });
   }
 
+  var countEl = document.getElementById('libCount');
+  var sortEl = document.getElementById('sortBy');
+  // Restore saved sort preference.
+  try {
+    var s0 = Store.getSettings();
+    if (s0.librarySort) sortEl.value = s0.librarySort;
+  } catch (e) {}
+
   function applySearch() {
     var q = (searchEl.value || '').toLowerCase().trim();
-    if (!q) return render(books);
-    render(books.filter(function (b) {
+    var filtered = !q ? books : books.filter(function (b) {
       return (b.title + ' ' + (b.author || '')).toLowerCase().indexOf(q) !== -1;
-    }));
+    });
+    var sorted = sortBooks(filtered, sortEl.value);
+    render(sorted);
+    if (countEl) {
+      countEl.textContent = sorted.length +
+        (sorted.length === 1 ? ' book' : ' books') +
+        (q ? ' matching “' + searchEl.value.trim() + '”' : '');
+    }
   }
   searchEl.addEventListener('input', applySearch);
+  sortEl.addEventListener('change', function () {
+    try { var s = Store.getSettings(); s.librarySort = sortEl.value; Store.saveSettings(s); } catch (e) {}
+    applySearch();
+  });
 
   function load() {
     var userBooks = Store.getUserLibrary().map(function (b) { b._user = true; return b; });
     fetch('books/manifest.json').then(function (r) { return r.ok ? r.json() : []; })
       .catch(function () { return []; })
       .then(function (repo) {
-        books = userBooks.concat(repo).sort(function (a, b) { return a.title.localeCompare(b.title); });
+        books = userBooks.concat(repo);
         applySearch();
       });
   }
