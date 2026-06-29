@@ -1,5 +1,21 @@
 [
   {
+    "id": "pg98",
+    "title": "A Tale of Two Cities",
+    "author": "Dickens, Charles",
+    "wordCount": 135678,
+    "cover": null,
+    "source": "Project Gutenberg #98 — public domain"
+  },
+  {
+    "id": "pg76",
+    "title": "Adventures of Huckleberry Finn",
+    "author": "Twain, Mark",
+    "wordCount": 110917,
+    "cover": null,
+    "source": "Project Gutenberg #76 — public domain"
+  },
+  {
     "id": "pg11",
     "title": "Alice's Adventures in Wonderland",
     "author": "Carroll, Lewis",
@@ -14,6 +30,30 @@
     "wordCount": 203414,
     "cover": null,
     "source": "Project Gutenberg #2554 — public domain"
+  },
+  {
+    "id": "pg345",
+    "title": "Dracula",
+    "author": "Stoker, Bram",
+    "wordCount": 161267,
+    "cover": null,
+    "source": "Project Gutenberg #345 — public domain"
+  },
+  {
+    "id": "pg1260",
+    "title": "Jane Eyre: An Autobiography",
+    "author": "Charlotte Brontë",
+    "wordCount": 185316,
+    "cover": null,
+    "source": "Project Gutenberg #1260 — public domain"
+  },
+  {
+    "id": "pg37106",
+    "title": "Little Women; Or, Meg, Jo, Beth, and Amy",
+    "author": "Louisa May Alcott",
+    "wordCount": 192511,
+    "cover": null,
+    "source": "Project Gutenberg #37106 — public domain"
   },
   {
     "id": "pg145",
@@ -48,11 +88,51 @@
     "source": "Project Gutenberg #1513 — public domain"
   },
   {
+    "id": "pg28054",
+    "title": "The Brothers Karamazov",
+    "author": "Dostoyevsky, Fyodor",
+    "wordCount": 350136,
+    "cover": null,
+    "source": "Project Gutenberg #28054 — public domain"
+  },
+  {
     "id": "pg100",
     "title": "The Complete Works of William Shakespeare",
     "author": "Shakespeare, William",
     "wordCount": 962470,
     "cover": null,
     "source": "Project Gutenberg #100 — public domain"
+  },
+  {
+    "id": "pg2160",
+    "title": "The Expedition of Humphry Clinker",
+    "author": "Smollett, T. (Tobias)",
+    "wordCount": 148355,
+    "cover": null,
+    "source": "Project Gutenberg #2160 — public domain"
+  },
+  {
+    "id": "pg64317",
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald",
+    "wordCount": 48192,
+    "cover": null,
+    "source": "Project Gutenberg #64317 — public domain"
+  },
+  {
+    "id": "pg174",
+    "title": "The Picture of Dorian Gray",
+    "author": "Wilde, Oscar",
+    "wordCount": 78899,
+    "cover": null,
+    "source": "Project Gutenberg #174 — public domain"
+  },
+  {
+    "id": "pg768",
+    "title": "Wuthering Heights",
+    "author": "Brontë, Emily",
+    "wordCount": 115877,
+    "cover": null,
+    "source": "Project Gutenberg #768 — public domain"
   }
 ]
