@@ -26,21 +26,41 @@ const fs = require('fs');
 const path = require('path');
 const P = require('./js/parser.js');
 
-// Use Node's built-in fetch (Node 18+). It follows redirects across http/https
-// and hosts automatically, which the raw https module does not.
-async function fetchText(url) {
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+// Use Node's built-in fetch (Node 18+). Retries with backoff because Gutenberg
+// frequently rate-limits / resets connections from CI runners, and surfaces the
+// real underlying cause (fetch hides it behind a generic "fetch failed").
+async function fetchText(url, attempt) {
+  attempt = attempt || 1;
+  var MAX = 4;
   if (typeof fetch !== 'function') {
     throw new Error('global fetch unavailable — needs Node 18+ (runner uses Node 22)');
   }
-  var res = await fetch(url, {
-    redirect: 'follow',
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; RSVPReaderBot/1.0)',
-      'Accept': 'text/plain,*/*'
+  try {
+    var res = await fetch(url, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'text/plain,text/html,*/*',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (res.status === 429 || res.status === 503) {
+      // Rate-limited / temporarily unavailable — back off and retry.
+      if (attempt < MAX) { await sleep(attempt * 2000); return fetchText(url, attempt + 1); }
+      throw new Error('HTTP ' + res.status + ' (rate-limited) for ' + url);
     }
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
-  return await res.text();
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
+    return await res.text();
+  } catch (e) {
+    var detail = (e && e.cause && e.cause.message) ? (' [' + e.cause.message + ']') : '';
+    // Connection-level failures are often transient on CI — retry a few times.
+    var transient = /fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket/i
+      .test((e && e.message ? e.message : '') + (e && e.cause ? e.cause.code || e.cause.message : ''));
+    if (transient && attempt < MAX) { await sleep(attempt * 2000); return fetchText(url, attempt + 1); }
+    throw new Error((e && e.message ? e.message : 'fetch failed') + detail + ' for ' + url);
+  }
 }
 
 // Query Gutendex (free Gutenberg metadata API) for public-domain matches.
@@ -51,39 +71,59 @@ function searchGutendex(query) {
   return fetchText(url).then(function (body) {
     var data = JSON.parse(body);
     return (data.results || []).map(function (b) {
+      var fmts = b.formats || {}, textUrl = null;
+      Object.keys(fmts).forEach(function (mime) {
+        if (!textUrl && /text\/plain/.test(mime) && !/\.zip$/.test(fmts[mime])) textUrl = fmts[mime];
+      });
       return {
         id: b.id,
         title: b.title,
         author: (b.authors && b.authors[0] && b.authors[0].name) || 'Unknown',
-        downloads: b.download_count || 0
+        downloads: b.download_count || 0,
+        textUrl: textUrl
       };
     });
   });
 }
 
-// Look up a single book's metadata (title/author) by its Gutenberg ID.
+// Look up a single book's metadata AND its known-good text download URL via
+// Gutendex (which tracks the actual working file location).
 async function getMetaById(gid) {
   try {
     var body = await fetchText('https://gutendex.com/books/' + encodeURIComponent(gid));
     var b = JSON.parse(body);
     if (b && b.title) {
+      var textUrl = null;
+      var fmts = b.formats || {};
+      // Prefer a plain-text format; avoid the .zip variants.
+      Object.keys(fmts).forEach(function (mime) {
+        if (!textUrl && /text\/plain/.test(mime) && !/\.zip$/.test(fmts[mime])) {
+          textUrl = fmts[mime];
+        }
+      });
       return {
         title: b.title,
-        author: (b.authors && b.authors[0] && b.authors[0].name) || 'Unknown'
+        author: (b.authors && b.authors[0] && b.authors[0].name) || 'Unknown',
+        textUrl: textUrl
       };
     }
   } catch (e) { /* fall through to defaults */ }
   return null;
 }
 
-async function getGutenbergText(gid) {
-  // Try the common plain-text URL patterns in order.
-  var urls = [
+async function getGutenbergText(gid, knownUrl) {
+  // Try Gutendex's known-good URL first (most reliable), then common patterns,
+  // then a mirror, so a single host being blocked doesn't fail the whole thing.
+  var urls = [];
+  if (knownUrl) urls.push(knownUrl);
+  urls.push(
     'https://www.gutenberg.org/cache/epub/' + gid + '/pg' + gid + '.txt',
     'https://www.gutenberg.org/ebooks/' + gid + '.txt.utf-8',
     'https://www.gutenberg.org/files/' + gid + '/' + gid + '-0.txt',
-    'https://www.gutenberg.org/files/' + gid + '/' + gid + '.txt'
-  ];
+    'https://www.gutenberg.org/files/' + gid + '/' + gid + '.txt',
+    // Mirror fallback (gutenberg.net.au-style mirrors vary; this is a common one).
+    'https://gutenberg.pglaf.org/' + gid.split('').join('/') + '/' + gid + '/' + gid + '-0.txt'
+  );
   var errors = [];
   for (var i = 0; i < urls.length; i++) {
     try { return await fetchText(urls[i]); }
@@ -135,7 +175,7 @@ async function main() {
     if (buildTop) {
       var top = results[0];
       console.log('\nBuilding top match: [ID ' + top.id + '] ' + top.title + ' …');
-      var rawT = await getGutenbergText(top.id);
+      var rawT = await getGutenbergText(top.id, top.textUrl);
       var bookT = P.parse(rawT, { title: top.title, author: top.author });
       bookT.id = 'pg' + top.id;
       bookT.title = top.title; bookT.author = top.author;
@@ -158,7 +198,7 @@ async function main() {
         try {
           console.log('\n[' + (k + 1) + '/' + ids.length + '] Project Gutenberg #' + oneId + ' …');
           var meta = await getMetaById(oneId);
-          var rawM = await getGutenbergText(oneId);
+          var rawM = await getGutenbergText(oneId, meta && meta.textUrl);
           var bookM = P.parse(rawM, { title: meta && meta.title, author: meta && meta.author });
           bookM.id = 'pg' + oneId;
           if (meta && meta.title) bookM.title = meta.title;
@@ -180,11 +220,15 @@ async function main() {
     var gid = ids[0];
     var id = argv[2] || ('pg' + gid);
     console.log('Downloading Project Gutenberg #' + gid + ' …');
-    var raw = await getGutenbergText(gid);
-    var book = P.parse(raw, { title: argv[3], author: argv[4] });
+    var metaS = await getMetaById(gid);
+    var raw = await getGutenbergText(gid, metaS && metaS.textUrl);
+    var book = P.parse(raw, {
+      title: argv[3] || (metaS && metaS.title),
+      author: argv[4] || (metaS && metaS.author)
+    });
     book.id = id;
-    if (argv[3]) book.title = argv[3];
-    if (argv[4]) book.author = argv[4];
+    if (argv[3]) book.title = argv[3]; else if (metaS && metaS.title) book.title = metaS.title;
+    if (argv[4]) book.author = argv[4]; else if (metaS && metaS.author) book.author = metaS.author;
     book.source = 'Project Gutenberg #' + gid + ' — public domain';
     writeBook(book);
   } else {
