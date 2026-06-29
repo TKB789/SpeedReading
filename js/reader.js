@@ -107,9 +107,8 @@
 
     els.scrub.max = String(Math.max(0, tokens.length - 1));
 
-    // Build the paged reader object + wire controls, but DEFER the heavy
-    // full-book pagination so the reader UI (word, controls) paints instantly.
-    setupPaged(true);
+    // Build the paged reader from the same token stream.
+    setupPaged();
 
     // Resume position and mode
     var prog = Store.getProgress(bookId);
@@ -122,44 +121,10 @@
     } else {
       updateProgressLabel(engine.snapshot());
     }
+    if (paged) paged.goToIndex(engine.index);
     wireControls();
-
-    // Show the chosen view immediately. In speed-read mode the word is already
-    // visible (no pagination needed). Show a brief placeholder in the page area.
-    var startRsvp = (resumeMode === 'rsvp');
-    document.body.classList.toggle('mode-rsvp', startRsvp);
-    document.body.classList.toggle('mode-read', !startRsvp);
-    currentView = startRsvp ? 'rsvp' : 'read';
-    var pageEl = document.getElementById('page');
-    if (pageEl) pageEl.innerHTML =
-      '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">Loading\u2026</p>';
-    document.getElementById('pagedView').hidden = false;
-    document.getElementById('rsvpView').hidden = !startRsvp;
-    document.getElementById('mRead').setAttribute('aria-checked', String(!startRsvp));
-    document.getElementById('mRsvp').setAttribute('aria-checked', String(startRsvp));
-    var mPane = document.getElementById('mPane');
-    if (mPane) mPane.hidden = !startRsvp;
-
-    // Now do pagination AFTER the first paint. Progressive: as soon as the page
-    // containing our position is known, it renders — the rest builds in the
-    // background, so there's no long "Loading…" wait on big books.
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        var started = paged.buildWhenReady ? true : false;
-        (function attempt(tries) {
-          var ok = paged.buildProgressive(engine.index,
-            function onReady() {
-              if (startRsvp) paged.follow(engine.index);
-            },
-            function onComplete() {
-              // Update the "page X of Y" total now that all pages exist.
-              if (paged.onPageChange) paged.onPageChange(paged.pageInfo());
-            }
-          );
-          if (!ok && tries < 40) setTimeout(function () { attempt(tries + 1); }, 50);
-        })(0);
-      });
-    });
+    // Apply saved mode (defaults to read). switchView positions the page too.
+    switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
   }
 
   var paged = null, currentView = 'read';
@@ -167,7 +132,7 @@
   var tapState = 'idle';
   var selectedIndex = null;   // word chosen while armed (null = none yet)
 
-  function setupPaged(deferBuild) {
+  function setupPaged() {
     var pageEl = document.getElementById('page');
     paged = new Paged(pageEl, {
       onWordTap: handlePageTap,
@@ -181,11 +146,9 @@
       }
     });
     paged.enableTaps();
-    if (!deferBuild) {
-      paged.buildWhenReady(tokens, function () {
-        paged.goToIndex(engine ? engine.index : 0);
-      });
-    }
+    paged.buildWhenReady(tokens, function () {
+      paged.goToIndex(engine ? engine.index : 0);
+    });
 
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
     document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
