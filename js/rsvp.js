@@ -15,12 +15,13 @@
       if (/[A-Za-z0-9\u00C0-\u024F]/.test(word[i])) letterIdx.push(i);
     }
     var n = letterIdx.length;
-    if (n <= 1) return letterIdx.length ? letterIdx[0] : 0;
+    if (n === 0) return 0; // token is all punctuation — no letter to pivot on
 
-    // Pivot by letter position: 1-letter → 1st letter; 2- and 3-letter → 2nd
-    // letter. (Index p is 0-based.)
+    // Pivot by letter count: 1- and 2-letter → 1st letter (index 0);
+    // 3-letter → 2nd letter (index 1). (Index p is 0-based.)
     var p;
-    if (n === 2 || n === 3) p = 1;
+    if (n <= 2) p = 0;
+    else if (n === 3) p = 1;
     // Words 4+ letters: place the pivot one letter left of centre for a better
     // visual balance (the long tail otherwise pushes the word off to one side).
     else p = Math.floor(n / 2) - 1;
