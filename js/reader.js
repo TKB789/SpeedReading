@@ -78,10 +78,16 @@
       '</p>';
     pageEl.innerHTML = '';
     pageEl.appendChild(box);
-    // Tapping the link aborts any in-flight fetch before navigating, so we don't
-    // leave a request dangling (the navigation alone would also kill it).
+    // The #page area has its own tap handler (paged.enableTaps) that can swallow
+    // this click, so don't rely on the <a>'s default navigation. Stop the event
+    // from bubbling to that handler and navigate explicitly.
     var link = document.getElementById('loadEscapeLink');
-    if (link) link.addEventListener('click', function () { abortLoad(); });
+    if (link) link.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      abortLoad();
+      window.location.href = LIBRARY_URL;
+    });
   }
 
   function setLoadingMsg(msg) {
