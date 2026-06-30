@@ -428,6 +428,11 @@
       }
     });
     paged.enableTaps();
+    // Give the paged view the chapter titles so it can render a heading at the
+    // top of each chapter (e.g. "CHAPTER 1. Loomings."). Indexed by chapter num.
+    if (book && book.chapters) {
+      paged.setChapterTitles(book.chapters.map(function (c) { return c.title; }));
+    }
     // Window the opening screen at the resumed position. No full-book build.
     paged.buildWhenReady(tokens, function () {
       paged.goToIndex(engine ? engine.index : 0);

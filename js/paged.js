@@ -24,10 +24,17 @@
     this.firstIndex = 0;        // first engine index visible on the screen
     this.lastIndex = 0;         // last engine index visible on the screen
     this._startStack = [];      // remembered screen-start positions, for exact prev
+    this._chapterTitles = null; // chapter index → title (for in-page headings)
     this.onTap = opts.onWordTap || function () {};
     this.onPageChange = opts.onPageChange || function () {};
     this._builtH = 0; this._builtW = 0;
   }
+
+  // Provide chapter titles so the paged view shows a heading at the top of each
+  // chapter. `titles` is indexed by chapter number (matching tokens' .chapter).
+  Paged.prototype.setChapterTitles = function (titles) {
+    this._chapterTitles = titles || null;
+  };
 
   // ---- display words are produced LAZILY, one per token position, on demand.
   // A "display word" merges any soft-hyphen continuation chunks (rare; only for
@@ -86,10 +93,38 @@
     var lastPara = -1, curPara = null;
     var pos = fromPos;
     var firstIdx = -1, lastIdx = -1;
+    var lastChapter = -1;
     while (pos < toks.length) {
       var dw = this._wordAt(pos);
       if (!dw) break;
       var w = dw.word;
+      // Show a chapter heading when this word is the genuine FIRST token of its
+      // chapter (the previous token belongs to a different chapter, or this is
+      // the book's first token). This is unambiguous and only ever fires once
+      // per chapter, at its real beginning — never mid-chapter.
+      if (w.chapter !== lastChapter) {
+        var isChapterFirstToken = (pos === 0) ||
+          (toks[pos - 1] && toks[pos - 1].chapter !== w.chapter);
+        if (isChapterFirstToken && this._chapterTitles &&
+            this._chapterTitles[w.chapter] != null) {
+          var hd = document.createElement('div');
+          hd.className = 'pg-chapter-title';
+          hd.textContent = this._chapterTitles[w.chapter];
+          el.appendChild(hd);
+          if (el.scrollHeight > maxH && (firstIdx >= 0)) {
+            // No room for the heading on a screen that already has content —
+            // end the screen here so the heading leads the next screen instead.
+            el.removeChild(hd);
+            break;
+          }
+          if (el.scrollHeight > maxH) {
+            // Heading alone overflows an empty screen (huge title); keep it
+            // anyway so we make progress, but don't add words.
+          }
+        }
+        lastChapter = w.chapter;
+        lastPara = -1; // a new chapter always starts a fresh paragraph
+      }
       if (w.para !== lastPara) {
         curPara = document.createElement('p');
         curPara.className = 'pg-para';
