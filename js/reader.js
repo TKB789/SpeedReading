@@ -456,6 +456,8 @@
     document.getElementById('mRead').addEventListener('click', function () { switchView('read'); closeMenu(); });
     document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp'); closeMenu(); });
 
+    setupSwipe(pageEl);
+
     setupTapPrompt();
     setupPaneToggle();
 
@@ -477,6 +479,36 @@
       }, 200);
     });
   }
+
+  // Swipe left/right on the page to turn pages. We distinguish a swipe from a tap
+  // (which selects a word) and from a vertical scroll: only a mostly-horizontal
+  // drag past a distance threshold turns the page. A short movement falls through
+  // to the tap handler, so word-selection still works.
+  function setupSwipe(pageEl) {
+    var x0 = 0, y0 = 0, t0 = 0, tracking = false;
+    var H_THRESHOLD = 45;   // px of horizontal travel to count as a page turn
+    var V_LIMIT = 35;       // px of vertical travel allowed before it's a scroll
+    pageEl.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      var t = e.touches[0];
+      x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); tracking = true;
+    }, { passive: true });
+    pageEl.addEventListener('touchend', function (e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = (e.changedTouches && e.changedTouches[0]) || null;
+      if (!t) return;
+      var dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
+      // Must be mostly horizontal, far enough, and not a slow long-press drag.
+      if (Math.abs(dx) >= H_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.6 &&
+          Math.abs(dy) < V_LIMIT * 3 && dt < 800) {
+        // Suppress the synthetic click so the swipe doesn't also select a word.
+        suppressNextPageTap = true;
+        if (dx < 0) paged.next(); else paged.prev();
+      }
+    }, { passive: true });
+  }
+  var suppressNextPageTap = false;
 
   // Format the paged status line from a pageInfo object. Until the background
   // total-page pass is done, show just the percent; once ready, show
@@ -630,6 +662,9 @@
 
   // A tap inside the paged area. idx = word index, or null for a gap tap.
   function handlePageTap(idx) {
+    // A swipe just turned the page; swallow the trailing synthetic tap so it
+    // doesn't also arm/select a word.
+    if (suppressNextPageTap) { suppressNextPageTap = false; return; }
     if (tapState === 'idle') { arm(); return; }   // first tap just arms
     if (tapState === 'picking') {                  // picking: this tap commits
       if (idx == null) return;
