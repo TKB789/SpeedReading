@@ -385,11 +385,9 @@
     var delta = idx - engine.index;
     engine.index = idx;
     if (paged && delta !== 0) {
-      // Shift the paged window's recorded positions by the same delta so its
-      // screen stays on the same words without a re-render. follow()/goToIndex
-      // only re-render if the active word actually left the screen.
-      paged.startPos += delta; paged.endPos += delta;
-      paged.firstIndex += delta; paged.lastIndex += delta;
+      // Shift the paged window AND its nav history by the same delta so its
+      // screen stays on the same words and prev still works after the array grew.
+      paged.shiftPositions(delta);
     }
   }
   function updateScrubMax() {

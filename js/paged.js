@@ -23,6 +23,7 @@
     this.endPos = 0;            // one past the last token position on the screen
     this.firstIndex = 0;        // first engine index visible on the screen
     this.lastIndex = 0;         // last engine index visible on the screen
+    this._startStack = [];      // remembered screen-start positions, for exact prev
     this.onTap = opts.onWordTap || function () {};
     this.onPageChange = opts.onPageChange || function () {};
     this._builtH = 0; this._builtW = 0;
@@ -125,27 +126,48 @@
     return true;
   };
 
-  // Lay out one screen BACKWARD ending just before token position `beforePos`.
-  // We estimate a start a screenful-and-a-bit back, lay forward, and adjust so
-  // the screen ends as close to (but not past) `beforePos` as possible.
+  // --- Deterministic backward layout. When there's no remembered start to pop
+  // back to (e.g. the reader opened mid-book then pressed prev), we must compute
+  // the previous screen's start. The key to consistency: the previous screen is
+  // the one whose FORWARD layout ends exactly at `beforePos`. We find its start
+  // by scanning candidate starts and laying each forward until one ends at
+  // beforePos. To keep it cheap we start a screenful back and walk the start
+  // DOWN until the forward layout from it reaches beforePos, then accept the
+  // largest such start (the tightest fit). This is the exact inverse of forward
+  // pagination, so prev→next→prev always lands on the same boundaries.
   Paged.prototype._layoutBackward = function (beforePos) {
     if (beforePos <= 0) { this._layoutForward(0); return; }
-    var span = Math.max(8, (this.endPos - this.startPos) * 2);
-    var guess = Math.max(0, beforePos - span);
-    for (var attempt = 0; attempt < 6; attempt++) {
-      this._layoutForward(guess);
-      if (this.endPos >= beforePos) break;       // reached the turn-back point
-      guess = Math.min(beforePos - 1, this.endPos); // came up short — move start up
+    var screenful = Math.max(8, this.endPos - this.startPos);
+    // Start a bit more than one screen back, then refine.
+    var start = Math.max(0, beforePos - Math.ceil(screenful * 1.4));
+    // Lay forward from `start`; this defines a screen [start, end).
+    this._layoutForward(start);
+    // If that screen ends before beforePos, there's a gap — nudge start up until
+    // the forward layout ends AT beforePos (no gap, no overlap).
+    var guard = 0;
+    while (this.endPos < beforePos && guard++ < screenful + 4) {
+      start = this.startPos + 1;
+      if (start >= beforePos) { start = Math.max(0, beforePos - 1); this._layoutForward(start); break; }
+      this._layoutForward(start);
     }
-    // If the fitted screen overshoots the boundary, clamp so we don't repeat
-    // content from the page we turned back from.
-    if (this.endPos > beforePos) this.endPos = beforePos;
+    // If it ends past beforePos, step start down until it ends at/just below it,
+    // so we never overlap the screen we turned back from.
+    guard = 0;
+    while (this.endPos > beforePos && this.startPos > 0 && guard++ < screenful + 4) {
+      start = this.startPos - 1;
+      this._layoutForward(start);
+    }
+    // Final layout is the previous screen; record its exact start so future
+    // forward/back from here is stable.
+    this.startPos = this.startPos;   // (already set by _layoutForward)
   };
 
   // Public: (re)build at the current size. tokens optional. Renders the screen
-  // starting at the last-known start position (default 0).
+  // starting at the last-known start position (default 0). Resets nav history,
+  // since a rebuild (resize / open) re-anchors the reading position.
   Paged.prototype.build = function (tokens) {
     if (tokens) this.tokens = tokens;
+    this._startStack = [];
     return this._layoutForward(this.startPos || 0);
   };
 
@@ -153,6 +175,7 @@
   Paged.prototype.buildWhenReady = function (tokens, cb) {
     var self = this;
     if (tokens) this.tokens = tokens;
+    this._startStack = [];
     var tries = 0;
     (function attempt() {
       if (self._layoutForward(self.startPos || 0)) { if (cb) cb(); return; }
@@ -160,8 +183,11 @@
     })();
   };
 
-  // Show the screen containing a given engine token index.
+  // Show the screen containing a given engine token index. A jump (chapter
+  // select, tap, resume) is a fresh anchor, so clear the back-history — the
+  // boundaries before a jump no longer connect to where we are now.
   Paged.prototype.goToIndex = function (idx) {
+    this._startStack = [];
     this._layoutForward(this._wordPosOfIndex(idx));
   };
 
@@ -180,11 +206,36 @@
     }
   };
 
-  Paged.prototype.next = function () {
-    if (this.endPos < this.tokens.length) this._layoutForward(this.endPos);
+  // Shift all recorded positions by `delta` (used when tokens are inserted before
+  // the current screen during background streaming). Shifts the nav history too,
+  // so prev still returns to the right boundaries after the array grows.
+  Paged.prototype.shiftPositions = function (delta) {
+    if (!delta) return;
+    this.startPos += delta; this.endPos += delta;
+    this.firstIndex += delta; this.lastIndex += delta;
+    if (this._startStack) {
+      for (var i = 0; i < this._startStack.length; i++) this._startStack[i] += delta;
+    }
   };
+
+  // Forward: remember the screen we're leaving so prev returns to it EXACTLY.
+  Paged.prototype.next = function () {
+    if (this.endPos < this.tokens.length) {
+      if (!this._startStack) this._startStack = [];
+      this._startStack.push(this.startPos);
+      this._layoutForward(this.endPos);
+    }
+  };
+  // Back: pop to the exact previous start if we have one (perfectly reversible);
+  // otherwise fall back to the deterministic backward layout.
   Paged.prototype.prev = function () {
-    if (this.startPos > 0) this._layoutBackward(this.startPos);
+    if (this.startPos <= 0) return;
+    if (this._startStack && this._startStack.length) {
+      var prevStart = this._startStack.pop();
+      this._layoutForward(prevStart);
+    } else {
+      this._layoutBackward(this.startPos);
+    }
   };
 
   // Position as a percentage of the book, by the first engine index on-screen.
