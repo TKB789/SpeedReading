@@ -76,10 +76,10 @@ body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: 
    keeps every control — including the WPM slider — together and visible, and
    makes hiding the text simply re-center the smaller group. */
 body.reader-page #rsvpView { overflow: hidden; display: flex; flex-direction: column;
-  flex: 1; min-height: 0; justify-content: center; gap: 10px; }
+  flex: 1; min-height: 0; justify-content: center; gap: 6px; }
 /* The reading-pane context strip above the rail keeps its previous size. */
-body.mode-rsvp #pagedView { flex: 0 0 auto; height: 28vh; min-height: 150px;
-  max-height: 28vh; display: flex; flex-direction: column; }
+body.mode-rsvp #pagedView { flex: 0 0 auto; height: 26vh; min-height: 140px;
+  max-height: 26vh; display: flex; flex-direction: column; }
 body.mode-rsvp .page-frame { flex: 1 1 auto; height: auto; min-height: 0; }
 body.mode-rsvp .page-meta { display: none; }
 /* Collapsed reading pane: hide the page strip; rail takes the room. */
@@ -193,11 +193,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
    screens) so the word box stays a comfortable size and the controls fit below
    without a tall empty box. */
 .rail {
-  position: relative; height: clamp(130px, 20vh, var(--rail-h));
+  position: relative; height: clamp(120px, 18vh, 200px);
   flex: 0 0 auto;
   background: var(--bg-2);
   border: 1px solid var(--line); border-radius: var(--radius);
-  margin: 12px 0; display: flex; align-items: center; justify-content: center;
+  margin: 8px 0; display: flex; align-items: center; justify-content: center;
   overflow: hidden;
   box-shadow: inset 0 0 0 6px var(--bg-2), inset 0 0 0 7px var(--line);
 }
@@ -217,7 +217,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 /* Controls: a compact grouped block with consistent spacing, never stretched.
    Centered as part of the speed-read group, so rows stay together and the WPM
    slider is always visible. */
-.controls { display: flex; flex-direction: column; gap: 12px; flex: 0 0 auto; }
+.controls { display: flex; flex-direction: column; gap: 9px; flex: 0 0 auto; }
 .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
 .transport button { font-size: 1rem; padding: 10px 16px; }
 .scrub input[type=range] { width: 100%; accent-color: var(--rubric); }
