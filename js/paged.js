@@ -388,10 +388,11 @@
     this.goToIndex(idx);
   };
 
-  // Follow the RSVP word: re-page only when it leaves the current page; keeps the
-  // chapter grid stable. Crossing into a new chapter re-paginates that chapter.
+  // Follow the RSVP word: keep the right page visible as speed-reading advances,
+  // but do NOT highlight the word — a moving highlight in the context pane is
+  // distracting. Re-page only when the word leaves the current page.
   Paged.prototype.follow = function (idx) {
-    this.activeIndex = idx;
+    this.activeIndex = -1;            // no highlight while following
     if (idx < this.firstIndex || idx > this.lastIndex) {
       this.goToIndex(idx);
     }
