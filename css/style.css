@@ -4,8 +4,9 @@
    glance-reading. Signature: a framed folio panel with the rubric pivot. */
 
 :root {
-  --rubric: #9e2b21;          /* rubric red — the one accent */
-  --rubric-soft: #9e2b2133;
+  --rubric: #2f5fa8;          /* accent — now blue (was rubric red) */
+  --rubric-soft: #2f5fa833;
+  --pivot: #9e2b21;           /* pivot letter stays rubric red */
   --gold: #8a6d2b;            /* muted gilt, used sparingly */
   --radius: 3px;
   --rail-h: 240px;
@@ -40,8 +41,9 @@
   --rail-line: #4a4233;
   --paper-edge: #2a241c;
   --paper-tint: #ffffff05;
-  --rubric: #cf4a3c;
-  --rubric-soft: #cf4a3c33;
+  --rubric: #5b8fd6;
+  --rubric-soft: #5b8fd633;
+  --pivot: #cf4a3c;           /* pivot stays red (brighter for dark) */
   --gold: #b89758;
 }
 
@@ -68,10 +70,16 @@ a { color: inherit; }
 body.reader-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: column;
   padding: 14px 18px 14px; overflow: hidden; }
-body.reader-page #rsvpView { overflow-y: auto; }
-/* In speed-read mode, the page panel shrinks to a context strip above the rail. */
-body.mode-rsvp #pagedView { flex: 0 0 auto; }
-body.mode-rsvp .page-frame { height: 30vh; min-height: 160px; flex: 0 0 auto; }
+/* Speed-read view fills the available height and never scrolls: the context
+   pane flexes to take leftover room (capped), while the rail + controls keep
+   their size and stay visible. */
+body.reader-page #rsvpView { overflow: hidden; display: flex; flex-direction: column;
+  flex: 1; min-height: 0; }
+/* In speed-read mode, the page panel is a capped context strip above the rail;
+   it does NOT grow, so the rail + controls get the remaining height. */
+body.mode-rsvp #pagedView { flex: 0 1 auto; min-height: 0; max-height: 34vh;
+  display: flex; flex-direction: column; }
+body.mode-rsvp .page-frame { flex: 1 1 auto; height: auto; min-height: 90px; }
 body.mode-rsvp .page-meta { display: none; }
 /* Collapsed reading pane: hide the page strip; rail takes the room. */
 body.mode-rsvp.pane-collapsed #pagedView { display: none; }
@@ -180,12 +188,14 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .reader-head h1 { font-family: var(--font-body); font-weight: 600; font-size: 1.5rem; margin: 0; }
 .reader-head .author { color: var(--fg-dim); font-size: 0.98rem; font-style: italic; }
 
-/* The folio panel + rail */
+/* The folio panel + rail. Height flexes (with sensible bounds) so the whole
+   speed-read column fits the viewport without scrolling. */
 .rail {
   position: relative; height: var(--rail-h);
+  flex: 1 1 auto; min-height: 120px; max-height: var(--rail-h);
   background: var(--bg-2);
   border: 1px solid var(--line); border-radius: var(--radius);
-  margin: 18px 0; display: flex; align-items: center; justify-content: center;
+  margin: 12px 0; display: flex; align-items: center; justify-content: center;
   overflow: hidden;
   box-shadow: inset 0 0 0 6px var(--bg-2), inset 0 0 0 7px var(--line);
 }
@@ -197,13 +207,13 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   letter-spacing: -0.01em;
 }
 .word .pre { text-align: right; }
-.word .piv { color: var(--rubric); }
+.word .piv { color: var(--pivot); }
 .word .post { text-align: left; }
 .idle { color: var(--fg-dim); font-family: var(--font-body); font-style: italic;
   font-size: 1.1rem; padding: 0 24px; text-align: center; }
 
-/* Controls */
-.controls { display: flex; flex-direction: column; gap: 16px; }
+/* Controls. flex:0 0 auto so they keep their size while the rail/pane flex. */
+.controls { display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto; }
 .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
 .transport button { font-size: 1rem; padding: 10px 16px; }
 .scrub input[type=range] { width: 100%; accent-color: var(--rubric); }
@@ -306,9 +316,9 @@ body.font-large  { --page-font: clamp(1.32rem, 4.9vw, 1.62rem); }
 .pg-chapter-title + .pg-para { text-indent: 0; }
 /* Speed-read landing highlight: marks the word you were on, then fades. */
 .pg-word.pg-active {
-  background: var(--rubric, #b54a35);
+  background: var(--rubric);
   color: #fff; border-radius: 3px;
-  box-shadow: 0 0 0 2px var(--rubric, #b54a35);
+  box-shadow: 0 0 0 2px var(--rubric);
   transition: background 1.4s ease, color 1.4s ease, box-shadow 1.4s ease;
 }
 .pg-word.pg-active.pg-active-fade {
