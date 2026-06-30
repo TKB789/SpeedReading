@@ -428,7 +428,15 @@
       onWordTap: handlePageTap,
       onPageChange: function (info) {
         var meta = document.getElementById('pageNum');
-        if (meta) meta.textContent = info.pct + '% read';
+        if (meta) {
+          // Apple-Books-style: "Page X of Y · N% read". The page count is within
+          // the current chapter (stable, re-flows on font change); the % is the
+          // whole-book position.
+          var pages = (info.pagesInChapter > 0)
+            ? 'Page ' + info.pageInChapter + ' of ' + info.pagesInChapter + ' \u00b7 '
+            : '';
+          meta.textContent = pages + info.pct + '% read';
+        }
         setTopChapter(info.chapter);
       }
     });
@@ -466,6 +474,7 @@
 
   // Switch between paged ('read') and speed-read ('rsvp'). Never autoplays.
   function switchView(view) {
+    var cameFromRsvp = (currentView === 'rsvp');
     currentView = view;
     var readView = document.getElementById('pagedView');
     var rsvpView = document.getElementById('rsvpView');
@@ -478,12 +487,40 @@
     if (engine) engine.pause();
     if (view === 'read') {
       rsvpView.hidden = true; readView.hidden = false;
-      paged.buildWhenReady(tokens, function () { paged.goToIndex(engine ? engine.index : 0); });
+      var landIdx = engine ? engine.index : 0;
+      paged.buildWhenReady(tokens, function () {
+        if (cameFromRsvp) {
+          // Land on the page containing the speed-read word, highlight it in
+          // place, then let the highlight fade so the eye can find it without
+          // the page shifting. (highlight = goToIndex + mark active word.)
+          paged.highlight(landIdx);
+          fadePagedHighlight();
+        } else {
+          paged.goToIndex(landIdx);
+        }
+      });
     } else {
       // Speed-read: small page strip follows above the rail.
       rsvpView.hidden = false; readView.hidden = false;
       paged.buildWhenReady(tokens, function () { paged.follow(engine ? engine.index : 0); });
     }
+  }
+
+  // Fade out the speed-read landing highlight a moment after it's shown. Adds a
+  // CSS class that transitions the highlight away, then removes it.
+  function fadePagedHighlight() {
+    var pageEl = document.getElementById('page');
+    if (!pageEl) return;
+    var mark = pageEl.querySelector('.pg-word.pg-active');
+    if (!mark) return;
+    // Let it sit briefly at full strength, then add the fading class.
+    setTimeout(function () {
+      if (mark) mark.classList.add('pg-active-fade');
+      setTimeout(function () {
+        if (mark) mark.classList.remove('pg-active', 'pg-active-fade');
+        if (paged) paged.activeIndex = -1;
+      }, 1400); // matches the CSS transition duration
+    }, 600);
   }
 
   /* ---------- Reading-pane collapse (speed-read mode only) ---------- */
