@@ -37,6 +37,45 @@
   var settings = Store.getSettings();
   document.documentElement.setAttribute('data-theme', settings.theme);
 
+  // ---- Text size (Small / Medium / Large) ----
+  // Applied as a body class that sets the --page-font variable. Default "small".
+  var FONT_SIZES = ['small', 'medium', 'large'];
+  function applyFontSize(size, repaginate) {
+    if (FONT_SIZES.indexOf(size) < 0) size = 'small';
+    for (var i = 0; i < FONT_SIZES.length; i++) {
+      document.body.classList.toggle('font-' + FONT_SIZES[i], FONT_SIZES[i] === size);
+    }
+    // Reflect the choice in the segmented control.
+    ['Small', 'Medium', 'Large'].forEach(function (label) {
+      var btn = document.getElementById('mFont' + label);
+      if (btn) btn.setAttribute('aria-checked', String(btn.dataset.size === size));
+    });
+    if (repaginate && paged) {
+      // Font size changed → pages re-flow. Re-paginate the current chapter and
+      // recompute total pages at the new size (counts are size-specific).
+      var anchor = engine ? engine.index : 0;
+      paged.goToIndex(anchor);
+      if (currentView === 'rsvp') paged.follow(anchor);
+      if (fullyLoaded && book && book.chapters) {
+        paged.cancelTotals();
+        paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
+      }
+    }
+  }
+  function setFontSize(size) {
+    var s = Store.getSettings();
+    s.fontSize = size;
+    Store.saveSettings(s);
+    applyFontSize(size, true);
+  }
+  // Apply the saved size immediately (before the book builds) so first pagination
+  // happens at the right size.
+  applyFontSize(settings.fontSize || 'small', false);
+  ['Small', 'Medium', 'Large'].forEach(function (label) {
+    var btn = document.getElementById('mFont' + label);
+    if (btn) btn.addEventListener('click', function () { setFontSize(btn.dataset.size); });
+  });
+
   function openMenu() { els.settingsMenu.hidden = false; }
   function closeMenu() { els.settingsMenu.hidden = true; }
   els.settingsBtn.addEventListener('click', function (e) {

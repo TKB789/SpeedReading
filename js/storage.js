@@ -38,7 +38,7 @@
     return Promise.resolve(false);
   }
 
-  var DEFAULT_SETTINGS = { wpm: 400, theme: 'light' };
+  var DEFAULT_SETTINGS = { wpm: 400, theme: 'light', fontSize: 'small' };
   function getSettings() {
     var s = lsGet(KEY_SETTINGS, {});
     return Object.assign({}, DEFAULT_SETTINGS, s);
