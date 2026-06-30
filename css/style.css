@@ -228,23 +228,21 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 /* View toggle (Read / Speed-read) */
 /* Reader top bar: title · chapter · author, all on one line */
 .reader-top { gap: 12px; }
-.reader-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
-.ri-title { font-family: var(--font-body); font-weight: 600; font-size: 1rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
-/* Push the chapter name to the right side of the header so the title gets the
-   space it needs. The separator travels with the chapter so it sits beside it. */
-.ri-sep { color: var(--rubric); flex: 0 0 auto; margin-left: auto; }
-.ri-chapter { font-family: var(--font-body); font-size: 0.92rem; color: var(--fg);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
-  flex: 0 1 auto; text-align: right; }
-.ri-author { font-family: var(--font-body); font-style: italic; font-size: 0.82rem;
-  color: var(--fg-dim); white-space: nowrap; flex: 0 0 auto; margin-left: 4px; }
+/* Title stacked over chapter, fitting the existing header height: small fonts
+   and tight line-height so two lines occupy the space one line used. */
+.reader-id { display: flex; flex-direction: column; justify-content: center;
+  gap: 0; min-width: 0; overflow: hidden; line-height: 1.15; }
+.ri-title { font-family: var(--font-body); font-weight: 600; font-size: 0.86rem;
+  line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 78vw; }
+.ri-sep { display: none; }                 /* no longer needed when stacked */
+.ri-chapter { font-family: var(--font-body); font-size: 0.78rem; color: var(--fg-dim);
+  line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 78vw; }
+.ri-author { display: none; }
 @media (max-width: 600px) {
-  .ri-author { display: none; }
-  /* On phones the title gets the lion's share; the chapter name keeps a small
-     right-aligned slot and ellipses if needed. */
-  .ri-title { max-width: 58vw; }
-  .ri-chapter { max-width: 30vw; }
+  .ri-title { max-width: 74vw; }
+  .ri-chapter { max-width: 74vw; }
 }
 
 /* Settings menu (anchored dropdown via full-screen backdrop) */
@@ -268,18 +266,16 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
   flex: 1; min-height: 0; min-width: 0; }
 .page {
-  /* Responsive reading column. On phones it fills the available width between the
-     page-turn arrows; on wider screens it's capped at a comfortable measure
-     (~62rem here gives a normal letter-size text column) and centred, so lines
-     don't stretch uncomfortably wide on desktop. min-width:0 lets it shrink with
-     the viewport; overflow-wrap (NOT word-break) only breaks genuinely over-long
-     tokens, so normal words like "ADVENTURES" never split mid-word. */
-  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 42rem; margin: 0 auto;
+  /* Wide reading column: minimal side margins so text fills the screen. The
+     arrows are gone (swipe turns pages instead), so the page spans the frame.
+     overflow-wrap (NOT word-break) only breaks genuinely over-long tokens. */
+  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 52rem; margin: 0 auto;
   height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: clamp(16px, 4vw, 32px) clamp(18px, 5vw, 40px);
+  padding: clamp(16px, 4vw, 32px) clamp(10px, 3vw, 28px);
   font-size: clamp(1.02rem, 3.6vw, 1.2rem); line-height: 1.66;
   overflow-wrap: break-word;
+  touch-action: pan-y;   /* allow vertical scroll gestures; we handle horizontal swipes */
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
@@ -304,18 +300,17 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
-.page-edge { flex: 0 0 30px; border: none; background: transparent; padding: 0;
-  font-size: 1.6rem; color: var(--fg-dim); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: color .12s; }
-.page-edge:hover { background: transparent; color: var(--rubric); }
+/* Arrows removed from the layout — page turns are by swipe now. Kept in the DOM
+   (collapsed) so existing handlers and keyboard/AT access still function. */
+.page-edge { flex: 0 0 0; width: 0; overflow: hidden; border: none; background: transparent;
+  padding: 0; margin: 0; color: transparent; pointer-events: none; }
 .page-meta { display: flex; justify-content: space-between; align-items: baseline;
   margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
 .page-meta .hint { font-size: 0.74rem; }
 @media (max-width: 520px) {
   /* Font and padding are handled responsively by clamp() on .page, so we don't
-     hard-override them here anymore (that was fighting the fluid sizing). Only
-     the page-turn arrows shrink slightly and the hint hides on narrow screens. */
-  .page-edge { flex-basis: 26px; font-size: 1.4rem; }
+     hard-override them here anymore (that was fighting the fluid sizing).
+     Arrows are gone (swipe to turn), so only the hint hides on narrow screens. */
   .page-meta .hint { display: none; }
 }
 /* Tap prompt + armed reading-area highlight */
