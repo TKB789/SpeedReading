@@ -295,16 +295,28 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
      zones cover these gutters PLUS the page's own blank side-padding. */
   padding: 0 clamp(6px, 2vw, 16px); }
 .page {
-  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 48rem; margin: 0 auto;
-  height: 100%; overflow: hidden; box-sizing: border-box;
+  flex: 0 1 auto; min-width: 0; width: 100%; max-width: 48rem; margin: 0 auto;
+  /* Height is locked to a whole number of text lines (set by the reader as
+     --page-box-h) so the box is the SAME height on every page regardless of how
+     much text lands on it. Falls back to filling the frame before measurement. */
+  height: var(--page-box-h, 100%); box-sizing: border-box;
+  overflow: hidden;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   /* Generous side padding gives a blank band the tap zones can use without ever
      covering a word; vertical padding stays comfortable. */
   padding: clamp(16px, 4vw, 32px) clamp(22px, 6vw, 40px);
-  font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem)); line-height: 1.66;
+  font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem));
+  /* Unitless line-height so the per-line pixel step is exactly font-size × this
+     — the reader uses that step to compute a whole-line box height. */
+  line-height: 1.66;
   overflow-wrap: break-word;
   touch-action: pan-y;
 }
+/* When the box height is locked to whole lines, center it in the available frame
+   so the leftover sub-line remainder splits evenly top/bottom. Only in paged
+   mode — in speed-read mode the page is a small context strip that should fill. */
+body:not(.mode-rsvp) .page-frame { align-items: center; }
+body.mode-rsvp .page { height: 100%; }
 /* Text size presets (Settings → Text size). "Small" is the default fluid size;
    Medium and Large scale up. Applied on <body> so the chosen size cascades into
    the page font variable; re-pagination on change recomputes pages at that size. */
