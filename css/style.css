@@ -192,7 +192,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
    screens) so the word box stays a comfortable size and the controls fit below
    without a tall empty box. */
 .rail {
-  position: relative; height: clamp(150px, 24vh, var(--rail-h));
+  position: relative; height: clamp(130px, 20vh, var(--rail-h));
   flex: 0 0 auto;
   background: var(--bg-2);
   border: 1px solid var(--line); border-radius: var(--radius);
@@ -213,10 +213,12 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .idle { color: var(--fg-dim); font-family: var(--font-body); font-style: italic;
   font-size: 1.1rem; padding: 0 24px; text-align: center; }
 
-/* Controls. In speed-read mode they grow to fill the space below the rail and
-   distribute their rows, so leftover height isn't dead space at the bottom. */
+/* Controls. In speed-read mode they fill the space below the rail with even
+   spacing between rows (not maximally spread), keeping every row — including the
+   WPM slider — comfortably visible. */
 .controls { display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto; }
-body.mode-rsvp .controls { flex: 1 1 auto; justify-content: space-evenly; gap: 8px; }
+body.mode-rsvp .controls { flex: 1 1 auto; justify-content: space-between;
+  gap: 12px; padding-bottom: 4px; }
 .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
 .transport button { font-size: 1rem; padding: 10px 16px; }
 .scrub input[type=range] { width: 100%; accent-color: var(--rubric); }
