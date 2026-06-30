@@ -21,17 +21,21 @@
     var t = line.trim();
     if (!t) return false;
     if (HEADING_KEYWORD.test(t)) {
-      // Guard against prose that merely begins with a keyword ("Part of the
-      // crew…", "Book lovers everywhere…"). A real heading: is short; does not
-      // read as a sentence (no internal sentence-ending punctuation followed by
-      // more words); and isn't a run of many lowercase words. We allow a single
-      // trailing period (common in "CHAPTER 1. Loomings.").
+      // Distinguish a real heading ("CHAPTER 1. Loomings", "LETTER IV") from prose
+      // that merely starts with a keyword ("letter said:", "Part of the crew…").
+      var m = HEADING_KEYWORD.exec(t);
+      var numeral = m[2];                 // "1", "IV", … or undefined
+      var rest = (m[3] || '').replace(/^[\s—:.\-]+/, '').trim(); // inline title
+      // If there's no numeral, the keyword must stand alone or be followed by a
+      // title that looks like a title (starts uppercase). A following lowercase
+      // word ("said", "of") means it's a sentence, not a heading.
+      if (!numeral) {
+        if (rest && /^[a-z]/.test(rest)) return false;   // "letter said:" → prose
+      }
+      // A keyword line must be reasonably short and not read as a sentence.
       if (t.length > 80) return false;
-      var inlineTitle = t.replace(/^\s*(chapter|letter|part|book|volume|canto|section|stave|act|scene)\b\s*[ivxlcdm\d]*\.?\s*[—:.\-]?\s*/i, '');
-      // Internal sentence break (". " or "; ") mid-line ⇒ prose, not a heading.
-      if (/[.;]\s+\S/.test(inlineTitle)) return false;
-      // A long run of words is prose; real inline titles are short.
-      if (inlineTitle.split(/\s+/).filter(Boolean).length > 9) return false;
+      if (/[.;]\s+\S/.test(rest)) return false;          // internal sentence break
+      if (rest.split(/\s+/).filter(Boolean).length > 9) return false;
       return true;
     }
     if (ROMAN_ONLY.test(t)) {
@@ -52,7 +56,58 @@
     var e = t.search(endRe);
     if (e !== -1) t = t.slice(0, e);
     t = t.replace(/^(?:\s*(?:Title|Author|Release date|Language|Credits|Other information and formats|Most recently updated|Produced by|Illustrator|Translator)\s*:[^\n]*\n?\s*\n?)+/i, '');
+    t = stripTableOfContents(t);
     return t.trim();
+  }
+
+  // Remove a leading "CONTENTS" / "TABLE OF CONTENTS" block. Many Gutenberg texts
+  // list every chapter heading up front; without removing it the parser treats
+  // each TOC entry as a (near-empty) chapter, duplicating the whole chapter list.
+  //
+  // Strategy: find a CONTENTS heading; from there, skip forward past the run of
+  // heading-like lines and their short description lines until we reach the point
+  // where real body prose begins. We detect that as the SECOND occurrence of the
+  // first chapter heading (the TOC lists it once, the body repeats it), or, if
+  // there's no repeat, the first heading followed by multiple lines of flowing
+  // prose. Conservative: if unsure, we leave the text untouched.
+  function stripTableOfContents(text) {
+    var lines = text.split('\n');
+    // Locate a CONTENTS heading in the first part of the document.
+    var tocStart = -1;
+    var scanLimit = Math.min(lines.length, 400);
+    for (var i = 0; i < scanLimit; i++) {
+      if (/^\s*(table of contents|contents)\.?\s*$/i.test(lines[i])) { tocStart = i; break; }
+    }
+    if (tocStart === -1) return text;
+
+    // Collect the chapter-heading labels that appear in the TOC region.
+    var firstHeading = null;
+    for (var j = tocStart + 1; j < lines.length; j++) {
+      var lt = lines[j].trim();
+      if (!lt) continue;
+      if (HEADING_KEYWORD.test(lt) || ROMAN_ONLY.test(lt)) { firstHeading = lt.replace(/\s+/g, ' '); break; }
+      // A non-heading, non-blank line right after CONTENTS that isn't a heading
+      // means this probably isn't a real TOC — bail out to be safe.
+      if (j > tocStart + 3) break;
+    }
+    if (!firstHeading) return text;
+
+    // Find where the BODY begins: the second time the first chapter heading
+    // appears (TOC lists it, body repeats it). Search after the TOC start.
+    var bodyStart = -1;
+    var seenFirst = false;
+    for (var k = tocStart + 1; k < lines.length; k++) {
+      var t2 = lines[k].trim().replace(/\s+/g, ' ');
+      if (t2.toLowerCase() === firstHeading.toLowerCase()) {
+        if (seenFirst) { bodyStart = k; break; }  // second occurrence = body
+        seenFirst = true;                          // first occurrence = TOC entry
+      }
+    }
+    // If the heading only appears once, there was no duplicate TOC — leave as is.
+    if (bodyStart === -1) return text;
+
+    // Drop everything from the CONTENTS heading up to (not including) the body.
+    return lines.slice(0, tocStart).concat(lines.slice(bodyStart)).join('\n');
   }
 
   function extractMeta(raw) {

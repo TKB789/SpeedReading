@@ -166,14 +166,13 @@
     var errEl = document.getElementById('addError');
     errEl.hidden = true;
     var f = fileInput.files && fileInput.files[0];
-    if (!f) { errEl.textContent = 'Choose a .txt file first.'; errEl.hidden = false; return; }
-    var reader = new FileReader();
-    reader.onload = function () {
+    if (!f) { errEl.textContent = 'Choose a .txt or .epub file first.'; errEl.hidden = false; return; }
+
+    var fb = { title: document.getElementById('tTitle').value.trim() || null,
+               author: document.getElementById('tAuthor').value.trim() || null };
+
+    function finish(book) {
       try {
-        var raw = String(reader.result);
-        var fb = { title: document.getElementById('tTitle').value.trim() || null,
-                   author: document.getElementById('tAuthor').value.trim() || null };
-        var book = GutenbergParser.parse(raw, fb);
         if (!book.chapters.length || !book.wordCount) throw new Error('No readable text found in that file.');
         book.id = 'u-' + Date.now().toString(36);
         book._user = true;
@@ -183,9 +182,26 @@
         fileInput.value = ''; document.getElementById('tTitle').value = ''; document.getElementById('tAuthor').value = '';
         load();
       } catch (e) { errEl.textContent = e.message; errEl.hidden = false; }
-    };
-    reader.onerror = function () { errEl.textContent = 'Could not read that file.'; errEl.hidden = false; };
-    reader.readAsText(f);
+    }
+    function fail(msg) { errEl.textContent = msg; errEl.hidden = false; }
+
+    var isEpub = /\.epub$/i.test(f.name) || f.type === 'application/epub+zip';
+    if (isEpub) {
+      if (typeof EpubParser === 'undefined') { fail('EPUB support failed to load. Reload the page and try again.'); return; }
+      // EPUB parsing is async (unzip + XML). Show a tiny inline busy hint.
+      errEl.textContent = 'Reading EPUB…'; errEl.hidden = false;
+      EpubParser.parse(f, fb).then(function (book) {
+        errEl.hidden = true; finish(book);
+      }).catch(function (e) { fail(e && e.message ? e.message : 'Could not read that EPUB.'); });
+    } else {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try { finish(GutenbergParser.parse(String(reader.result), fb)); }
+        catch (e) { fail(e.message); }
+      };
+      reader.onerror = function () { fail('Could not read that file.'); };
+      reader.readAsText(f);
+    }
   });
 
   /* Data drawer: persist state + export/import */
