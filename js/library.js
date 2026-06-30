@@ -188,15 +188,18 @@
     var isEpub = /\.epub$/i.test(f.name) || f.type === 'application/epub+zip';
     if (isEpub) {
       if (typeof EpubParser === 'undefined') { fail('EPUB support failed to load. Reload the page and try again.'); return; }
-      // EPUB parsing is async (unzip + XML). Show a tiny inline busy hint.
+      // EPUB parsing runs in a Web Worker so the page stays responsive. Show a
+      // live progress count as chapters stream in.
       errEl.textContent = 'Reading EPUB…'; errEl.hidden = false;
-      EpubParser.parse(f, fb).then(function (book) {
+      EpubParser.parse(f, fb, function (doneN, total) {
+        if (total) errEl.textContent = 'Reading EPUB… ' + Math.round(doneN / total * 100) + '%';
+      }).then(function (book) {
         errEl.hidden = true; finish(book);
       }).catch(function (e) { fail(e && e.message ? e.message : 'Could not read that EPUB.'); });
     } else {
       var reader = new FileReader();
       reader.onload = function () {
-        try { finish(GutenbergParser.parse(String(reader.result), fb)); }
+        try { finish(TextParser.parse(String(reader.result), fb)); }
         catch (e) { fail(e.message); }
       };
       reader.onerror = function () { fail('Could not read that file.'); };

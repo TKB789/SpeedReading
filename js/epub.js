@@ -1,6 +1,6 @@
 /* epub.js — parse an EPUB file into the SAME structured shape the .txt parser
  * produces: { title, author, wordCount, chapters: [{ title, paras: [...] }] }.
- * Because the output matches GutenbergParser.parse(), everything downstream — the
+ * Because the output matches TextParser.parse(), everything downstream — the
  * RSVP tokenizer, windowed pagination, coordinates, storage — works unchanged.
  *
  * EPUB is a ZIP of XHTML files plus manifests. We:
@@ -58,8 +58,11 @@
     var body = doc.body || doc.documentElement;
     if (!body) return { heading: null, paras: [] };
 
-    var drop = body.querySelectorAll('script,style,nav,header,footer,[hidden],[role="doc-pagebreak"]');
+    var drop = body.querySelectorAll('script,style,nav,header,footer,figure,figcaption,[hidden],[role="doc-pagebreak"]');
     for (var i = 0; i < drop.length; i++) drop[i].parentNode && drop[i].parentNode.removeChild(drop[i]);
+    // Remove standalone images and any now-empty wrappers left behind.
+    var imgs = body.querySelectorAll('img,image,svg');
+    for (var g = 0; g < imgs.length; g++) imgs[g].parentNode && imgs[g].parentNode.removeChild(imgs[g]);
 
     var heading = null;
     var hEl = body.querySelector('h1,h2,h3,h4');
@@ -85,7 +88,8 @@
           if (hasBlockChild(c)) { walk(c); }            // container → descend
           else {
             var t = (c.textContent || '').replace(/\s+/g, ' ').trim();
-            if (t) paras.push(t);                        // leaf block → a paragraph
+            // Skip paragraphs that are just an illustration marker/caption.
+            if (t && !/^\[?\s*_?illustration\b/i.test(t)) paras.push(t); // leaf block → a paragraph
           }
         }
       }
@@ -153,8 +157,9 @@
     return map;
   }
 
-  // Main entry. `file` is a File/Blob (the uploaded .epub). Returns Promise<book>.
-  function parse(file, fallback) {
+  // Synchronous (main-thread) parse — used as a FALLBACK when Web Workers are
+  // unavailable. `file` is a File/Blob (the uploaded .epub). Returns Promise<book>.
+  function parseSync(file, fallback, onProgress) {
     fallback = fallback || {};
     var JSZipLib = getJSZip();
     return JSZipLib.loadAsync(file).then(function (zip) {
@@ -257,7 +262,122 @@
     });
   }
 
-  var api = { parse: parse };
+  // Resolve the site base URL (folder containing index.html) so the worker can
+  // importScripts JSZip and we can locate js/epub-worker.js, wherever the site
+  // is hosted (root or a sub-path on GitHub Pages).
+  function siteBase() {
+    try {
+      var p = root.location && root.location.pathname || '/';
+      // strip the trailing file (reader.html / index.html), keep the folder
+      var dir = p.replace(/[^/]*$/, '');
+      return root.location.origin + dir;
+    } catch (e) { return ''; }
+  }
+
+  // Worker-driven parse: the worker unzips off the main thread and streams back
+  // each chapter's raw XHTML; we do the light DOM→paragraph step here, yielding
+  // between docs so the UI never freezes. `onProgress(done, total)` is optional.
+  function parseWithWorker(file, fallback, onProgress) {
+    fallback = fallback || {};
+    return new Promise(function (resolve, reject) {
+      var worker;
+      try {
+        worker = new Worker(siteBase() + 'js/epub-worker.js?v=1782900000');
+      } catch (e) { reject(e); return; }
+
+      var meta = { title: null, author: null, count: 0 };
+      var docs = [];            // index → { path, xhtml }
+      var opfPath = null;
+      var navData = null, ncxData = null;
+      var received = 0;
+      var done = false;
+
+      function finish() {
+        // Build toc titles (needs DOMParser — main thread only).
+        var tocTitles = {};
+        try {
+          if (navData) tocTitles = remapTitles(parseNavTitles(navData.xml), navData.path, opfPath);
+          else if (ncxData) tocTitles = remapTitles(parseNcxTitles(ncxData.xml), ncxData.path, opfPath);
+        } catch (e) {}
+        function remapTitles(map, tocPath, opf) {
+          var out = {};
+          Object.keys(map).forEach(function (k) { out[resolvePath(tocPath, k)] = map[k]; });
+          return out;
+        }
+
+        // Parse each doc's XHTML into paragraphs, one per tick so the UI breathes.
+        var chapters = [];
+        var i = 0;
+        function step() {
+          var sliceEnd = Math.min(docs.length, i + 2); // a couple docs per tick
+          for (; i < sliceEnd; i++) {
+            var d = docs[i];
+            if (!d || !d.xhtml) continue;
+            var parsed = xhtmlToParas(d.xhtml);
+            if (!parsed.paras.length) continue; // skip covers/empty docs
+            var title = tocTitles[d.path] || parsed.heading || ('Section ' + (chapters.length + 1));
+            chapters.push({ title: title, paras: parsed.paras });
+          }
+          if (onProgress) onProgress(Math.min(i, docs.length), docs.length);
+          if (i < docs.length) {
+            (root.requestAnimationFrame || function (f) { setTimeout(f, 0); })(step);
+          } else {
+            if (!chapters.length) { reject(new Error('No readable text found in this EPUB.')); return; }
+            var wordCount = chapters.reduce(function (n, c) {
+              return n + c.paras.reduce(function (m, p) { return m + countWords(p); }, 0);
+            }, 0);
+            resolve({
+              title: meta.title || fallback.title || 'Untitled',
+              author: meta.author || fallback.author || 'Unknown',
+              wordCount: wordCount, chapters: chapters
+            });
+          }
+        }
+        step();
+      }
+
+      worker.onmessage = function (e) {
+        var m = e.data || {};
+        if (m.type === 'meta') {
+          meta.title = m.title; meta.author = m.author; meta.count = m.count;
+        } else if (m.type === 'doc') {
+          docs[m.index] = { path: m.path, xhtml: m.xhtml };
+          received++;
+          if (onProgress) onProgress(received, meta.count || received);
+        } else if (m.type === 'done') {
+          opfPath = m.opfPath; navData = m.nav; ncxData = m.ncx;
+          done = true;
+          worker.terminate();
+          finish();
+        } else if (m.type === 'error') {
+          worker.terminate();
+          reject(new Error(m.message || 'Could not read that EPUB.'));
+        }
+      };
+      worker.onerror = function (e) {
+        worker.terminate();
+        reject(new Error((e && e.message) || 'EPUB worker failed.'));
+      };
+
+      worker.postMessage({ type: 'parse', file: file, base: siteBase() });
+    });
+  }
+
+  // Public entry. Uses a Web Worker so the page stays responsive while a large
+  // EPUB unzips; falls back to the main-thread parser if Workers (or the worker
+  // file) aren't available. `onProgress(done, total)` is optional.
+  function parse(file, fallback, onProgress) {
+    if (typeof root.Worker !== 'undefined') {
+      return parseWithWorker(file, fallback, onProgress)
+        .catch(function (e) {
+          // Any worker problem (CSP, file 404, etc.) → graceful main-thread path.
+          return parseSync(file, fallback, onProgress);
+        });
+    }
+    return parseSync(file, fallback, onProgress);
+  }
+
+  var api = { parse: parse, parseSync: parseSync };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.EpubParser = api;
 })(typeof self !== 'undefined' ? self : this);

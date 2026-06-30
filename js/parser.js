@@ -1,6 +1,6 @@
 /*
- * parser.js — turn a Project Gutenberg plain-text string into structured book
- * data: { title, author, wordCount, chapters: [{ title, paras: [...] }] }.
+ * parser.js — turn a plain-text book string into structured book data:
+ * { title, author, wordCount, chapters: [{ title, paras: [...] }] }.
  *
  * Approach (deliberately simple):
  *   1. If the book has a table of contents, the TOC IS the list of chapters.
@@ -11,10 +11,12 @@
  *      starting with a section keyword (Chapter/Letter/Part/…), not followed by
  *      lowercase prose, and with no comma/semicolon (which headings never have).
  *   3. Everything before the first heading is one section called "Beginning".
+ *   4. Inline [Illustration: …] caption blocks and a front-matter "List of
+ *      Illustrations" are stripped out (they aren't prose to read).
  *
  * Pure function, no DOM/Node APIs, so it runs in the browser (upload) and in
- * build-book.js (repo books). Exposed as global `GutenbergParser` and via
- * module.exports.
+ * build-book.js (repo books). Exposed as global `TextParser` (with the legacy
+ * alias `GutenbergParser` kept for older callers) and via module.exports.
  */
 (function (root) {
   'use strict';
@@ -56,17 +58,108 @@
     return false;                                              // "Part. She wrote…" → prose
   }
 
-  function stripGutenberg(raw) {
+  function stripBoilerplate(raw) {
     var t = String(raw).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    var startRe = /\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK[^\n]*\*\*\*/i;
-    var endRe = /\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK[^\n]*\*\*\*/i;
+    // Some plain-text sources wrap the body in BEGIN/END markers. If present,
+    // keep only what's between them. (Harmless when absent — most uploads.)
+    var startRe = /\*\*\*\s*START OF (?:THE|THIS) [^\n]*EBOOK[^\n]*\*\*\*/i;
+    var endRe = /\*\*\*\s*END OF (?:THE|THIS) [^\n]*EBOOK[^\n]*\*\*\*/i;
     var s = t.search(startRe);
     if (s !== -1) t = t.slice(s).replace(startRe, '');
     var e = t.search(endRe);
     if (e !== -1) t = t.slice(0, e);
-    // Drop a leading metadata block some PG texts place after the START marker.
+    // Drop a leading metadata block some texts place at the very top.
     t = t.replace(/^(?:\s*(?:Title|Author|Release date|Language|Credits|Other information and formats|Most recently updated|Produced by|Illustrator|Translator)\s*:[^\n]*\n?\s*\n?)+/i, '');
     return t.trim();
+  }
+
+  // Remove [Illustration …] caption blocks. These mark a picture in the source
+  // and are not prose to be read. A block opens at "[Illustration" and runs to
+  // its MATCHING close bracket — which may be several lines later and may contain
+  // nested brackets (e.g. "[Illustration: M^{r.} & M^{rs.} Bennet  [_Copyright
+  // 1894 by George Allen._]]"). We scan bracket depth so the whole block is
+  // removed, nested captions included, without eating unrelated text after it.
+  function stripIllustrations(text) {
+    var out = '';
+    var i = 0, n = text.length;
+    while (i < n) {
+      var open = text.indexOf('[', i);
+      if (open === -1) { out += text.slice(i); break; }
+      // Is this bracket the start of an Illustration block? Look just past "[".
+      var rest = text.slice(open + 1);
+      if (/^\s*_?illustration\b/i.test(rest)) {
+        // Walk to the matching close bracket, counting nested [ ].
+        var depth = 0, j = open;
+        for (; j < n; j++) {
+          if (text[j] === '[') depth++;
+          else if (text[j] === ']') { depth--; if (depth === 0) { j++; break; } }
+        }
+        out += text.slice(i, open);   // keep everything before the block
+        i = j;                         // skip the whole illustration block
+        // Swallow a blank line left behind so we don't create a stray gap.
+        if (text[i] === '\n') i++;
+        if (text[i] === '\n') i++;
+      } else {
+        out += text.slice(i, open + 1); // ordinary "[", keep it and continue
+        i = open + 1;
+      }
+    }
+    return out;
+  }
+
+  // Detect and remove a front-matter "List of Illustrations" block. Such a list
+  // sits near the top (often right after a TOC) under a heading like
+  // "LIST OF ILLUSTRATIONS" / "ILLUSTRATIONS", followed by a run of short
+  // caption lines (page-number entries), and ends at the first real chapter
+  // heading or a long prose paragraph. Returns the text with that block removed.
+  // `illoCaptions` (a Set of normalized caption strings, gathered from the
+  // [Illustration] blocks we stripped) lets us confirm the list really is the
+  // illustrations index before removing it.
+  function stripIllustrationList(text, illoCaptions) {
+    var lines = text.split('\n');
+    var hdr = -1;
+    for (var i = 0; i < Math.min(lines.length, 400); i++) {
+      if (/^\s*(list of )?illustrations\.?\s*$/i.test(lines[i])) { hdr = i; break; }
+    }
+    if (hdr === -1) return text;
+
+    // From the header, consume short non-prose lines until we hit a real chapter
+    // heading, a long line (prose), or two consecutive non-empty long lines.
+    var end = hdr;
+    var matched = 0, seen = 0;
+    for (var j = hdr + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) { end = j; continue; }
+      if (KEYWORD.test(t) && t.length <= 70) break;   // reached the first chapter
+      if (t.length > 80) break;                        // reached prose
+      seen++;
+      // A caption line often ends in a page number, or matches a stripped caption.
+      var norm = normHeading(t).replace(/\s+\d+$/, '');
+      if (illoCaptions && illoCaptions.has(norm)) matched++;
+      if (/\b\d{1,4}\s*$/.test(t) || /\bfrontispiece\b/i.test(t)) matched++;
+      end = j;
+      if (seen > 200) break; // safety
+    }
+    // Only strip if it really looks like an illustrations index (some entries
+    // matched a known caption or page-number pattern), to avoid eating content.
+    if (seen >= 1 && (matched >= 1 || (illoCaptions && illoCaptions.size > 0))) {
+      lines.splice(hdr, (end - hdr + 1));
+      return lines.join('\n');
+    }
+    return text;
+  }
+
+  // Gather normalized captions from [Illustration: caption] blocks before we
+  // strip them, so the front-matter list can be matched and removed too.
+  function collectIllustrationCaptions(text) {
+    var set = new Set();
+    var re = /\[\s*_?illustration\b\s*:?\s*([^\[\]]*)/gi;
+    var m;
+    while ((m = re.exec(text))) {
+      var cap = (m[1] || '').replace(/_/g, '').replace(/\s+/g, ' ').trim();
+      if (cap) set.add(normHeading(cap).replace(/\s+\d+$/, ''));
+    }
+    return set;
   }
 
   function extractMeta(raw) {
@@ -200,7 +293,12 @@
   function parse(raw, fallback) {
     fallback = fallback || {};
     var meta = extractMeta(raw);
-    var body = stripGutenberg(raw);
+    var body = stripBoilerplate(raw);
+    // Strip illustrations: first note the captions, then drop the [Illustration…]
+    // blocks, then remove a matching front-matter "List of Illustrations".
+    var captions = collectIllustrationCaptions(body);
+    body = stripIllustrations(body);
+    body = stripIllustrationList(body, captions);
     var chapters = splitChapters(body);
     var wordCount = chapters.reduce(function (n, c) {
       return n + c.paras.reduce(function (m, p) { return m + countWords(p); }, 0);
@@ -213,7 +311,14 @@
     };
   }
 
-  var api = { parse: parse, stripGutenberg: stripGutenberg, splitChapters: splitChapters };
+  var api = {
+    parse: parse,
+    stripBoilerplate: stripBoilerplate,
+    stripIllustrations: stripIllustrations,
+    stripIllustrationList: stripIllustrationList,
+    splitChapters: splitChapters
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
-  root.GutenbergParser = api;
+  root.TextParser = api;
+  root.GutenbergParser = api; // legacy alias (build-book.js / older callers)
 })(typeof self !== 'undefined' ? self : this);

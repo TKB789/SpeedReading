@@ -143,7 +143,44 @@
     return true;
   };
 
-  // Fill the page box starting at token `fromPos`, not crossing `limit`. If
+  // ---- lock the page box to a whole number of text lines ------------------
+  // The reading box used to be whatever height the flex layout gave it, so its
+  // apparent size shifted (and a part-line of text could peek at the bottom).
+  // We measure the available height in the frame, the per-line step (font-size ×
+  // line-height) and the box's vertical padding, then set the box height to
+  // padding + N×lineStep for the largest N that fits. Every page is then exactly
+  // the same height: a clean whole number of lines, no partial line clipped.
+  // Returns true if a height was set. Must run AFTER the font is applied so the
+  // computed font-size is current.
+  Paged.prototype.lockBoxToLines = function () {
+    var el = this.pageEl;
+    var frame = el.parentNode;            // .page-frame
+    if (!frame) return false;
+    var cs = root.getComputedStyle(el);
+    var fontPx = parseFloat(cs.fontSize) || 16;
+    var lh = parseFloat(cs.lineHeight);
+    if (!lh || isNaN(lh)) lh = fontPx * 1.66;   // unitless fallback
+    var padTop = parseFloat(cs.paddingTop) || 0;
+    var padBot = parseFloat(cs.paddingBottom) || 0;
+    var borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+
+    // Available height for the box = frame's inner height. Read it WITHOUT our
+    // own locked height interfering: temporarily clear the variable.
+    el.style.removeProperty('--page-box-h');
+    var avail = frame.clientHeight;
+    if (!avail || avail < 60) return false;
+
+    var contentAvail = avail - padTop - padBot - borderY;
+    var lines = Math.floor(contentAvail / lh);
+    if (lines < 1) lines = 1;
+    var boxH = Math.round(lines * lh + padTop + padBot + borderY);
+    el.style.setProperty('--page-box-h', boxH + 'px');
+    this._lockedBoxH = boxH;
+    this._lockedLines = lines;
+    return true;
+  };
+
+
   // measureOnly, we still render (to measure) but the caller will re-render the
   // chosen page for display via _renderPage. Returns the token position one past
   // the last word that fit. Renders a chapter heading at the chapter's first token.
@@ -240,6 +277,9 @@
     var sizeChanged = this.pageEl.clientHeight !== this._builtH ||
                       this.pageEl.clientWidth !== this._builtW;
     if (this._dirty || this._curChapter !== chapter || sizeChanged || !this._pages.length) {
+      // Lock the box to a whole number of lines first, so pagination measures the
+      // stable, line-snapped height (constant page box on every page).
+      this.lockBoxToLines();
       this._dirty = false;
       return this._paginateChapter(chapter, hintPos);
     }
