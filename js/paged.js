@@ -41,7 +41,11 @@
 
   Paged.prototype.setChapterTitles = function (titles) {
     this._chapterTitles = titles || null;
+    if (titles) this._numChapters = titles.length;
   };
+
+  // Tell the pager how many chapters the book has (for total-page math).
+  Paged.prototype.setChapterCount = function (n) { this._numChapters = n; };
 
   // Provide chapter token-position ranges so we know each chapter's bounds without
   // scanning. ranges[c] = {start, end} (end exclusive). If not supplied, we derive
@@ -77,15 +81,28 @@
   };
 
   // Token-position bounds [start,end) of a chapter. Uses provided ranges if any,
-  // else scans outward from a known position in that chapter.
+  // else scans for the chapter. When `hintPos` is a position known to be inside
+  // the chapter, we expand outward from it (fast). Otherwise we scan from the
+  // start of the token array to find the chapter's first token.
   Paged.prototype._chapterBounds = function (chapter, hintPos) {
     if (this._chapterRanges && this._chapterRanges[chapter]) {
       var r = this._chapterRanges[chapter];
       return { start: r.start, end: r.end };
     }
     var toks = this.tokens;
-    var start = Math.max(0, Math.min(toks.length - 1, hintPos | 0));
-    while (start > 0 && toks[start - 1] && toks[start - 1].chapter === chapter) start--;
+    var start;
+    if (hintPos != null && toks[hintPos] && toks[hintPos].chapter === chapter) {
+      // Expand outward from a position known to be in this chapter.
+      start = hintPos;
+      while (start > 0 && toks[start - 1] && toks[start - 1].chapter === chapter) start--;
+    } else {
+      // No usable hint: find the chapter's first token by scanning from 0.
+      start = -1;
+      for (var i = 0; i < toks.length; i++) {
+        if (toks[i] && toks[i].chapter === chapter) { start = i; break; }
+      }
+      if (start === -1) return { start: 0, end: 0 }; // chapter not present
+    }
     var end = start;
     while (end < toks.length && toks[end] && toks[end].chapter === chapter) end++;
     return { start: start, end: end };
@@ -116,6 +133,13 @@
     this._curChapter = chapter;
     this._pages = pages;
     this._builtH = maxH; this._builtW = el.clientWidth;
+    // Keep the totals cache consistent: the chapter we just laid out has a known
+    // page count now. If the box size matches the cached signature, store it.
+    var sig = maxH + 'x' + el.clientWidth;
+    if (this._countsSig === sig) {
+      if (!this._pageCounts) this._pageCounts = {};
+      this._pageCounts[chapter] = pages.length;
+    }
     return true;
   };
 
@@ -219,6 +243,93 @@
       return this._paginateChapter(chapter, hintPos);
     }
     return true;
+  };
+
+  // ---- TOTAL pages across the whole book -----------------------------------
+  // Computing a book-wide "page N of TOTAL" needs every chapter's page count at
+  // the CURRENT box size. We compute that in the background, one chapter per
+  // time-slice, so the reader isn't blocked. Results cache in _pageCounts keyed
+  // by chapter; _countsSig records the box size they were computed at, so a font
+  // change invalidates and recomputes. The live page is restored after each
+  // chapter we measure, so the view never visibly flickers between frames.
+  Paged.prototype.computeTotals = function (numChapters, onProgress) {
+    var self = this;
+    var sig = this.pageEl.clientHeight + 'x' + this.pageEl.clientWidth;
+    if (this._countsSig !== sig) { this._pageCounts = {}; this._countsSig = sig; }
+    this._totalsCanceled = false;
+    // Build a chapter → first-token-position index once, so each chapter's bounds
+    // are found in O(1) instead of re-scanning the array per chapter.
+    var firstPos = {};
+    for (var i = 0; i < this.tokens.length; i++) {
+      var c = this.tokens[i].chapter;
+      if (firstPos[c] == null) firstPos[c] = i;
+    }
+    var ch = 0;
+    function step() {
+      if (self._totalsCanceled) return;
+      var sliceEnd = Math.min(numChapters, ch + 3); // a few chapters per slice
+      for (; ch < sliceEnd; ch++) {
+        if (self._pageCounts[ch] == null) {
+          self._pageCounts[ch] = self._countChapterPages(ch, firstPos[ch]);
+        }
+      }
+      if (onProgress) onProgress(self._totalsReady(numChapters), self.totalPages(numChapters));
+      if (ch < numChapters) {
+        (root.requestAnimationFrame || function (f) { setTimeout(f, 0); })(step);
+      } else {
+        // Re-render the live page so its onPageChange fires with final totals.
+        self._renderPage(self._pageIdx);
+      }
+    }
+    step();
+  };
+  Paged.prototype.cancelTotals = function () { this._totalsCanceled = true; };
+
+  // Paginate one chapter only to COUNT its pages, then restore the visible page
+  // so the view is untouched. `hintPos` is the chapter's first token position (if
+  // known) for fast bounds. Uses the same _fillPage measurement as display.
+  Paged.prototype._countChapterPages = function (chapter, hintPos) {
+    var maxH = this.pageEl.clientHeight;
+    if (!maxH || maxH < 40) return 1;
+    var b = this._chapterBounds(chapter, hintPos);
+    if (b.start == null || b.end <= b.start) return 1;
+    var count = 0, pos = b.start, safety = 0;
+    while (pos < b.end && safety++ < 100000) {
+      var pageStart = pos;
+      pos = this._fillPage(pos, b.end, true);
+      if (pos <= pageStart) pos = pageStart + 1;
+      count++;
+    }
+    // Restore the page the reader is actually on (we just clobbered the box).
+    if (this._pages.length) this._fillPage(this._pages[this._pageIdx].startPos,
+                                           this._pages[this._pageIdx].endPos, false);
+    return count || 1;
+  };
+
+  Paged.prototype._totalsReady = function (numChapters) {
+    if (!this._pageCounts) return false;
+    for (var c = 0; c < numChapters; c++) if (this._pageCounts[c] == null) return false;
+    return true;
+  };
+  // Total pages across the book (sum of cached chapter counts). Returns 0 until
+  // at least partly computed; pair with _totalsReady to know if it's final.
+  Paged.prototype.totalPages = function (numChapters) {
+    if (!this._pageCounts) return 0;
+    var t = 0;
+    for (var c = 0; c < numChapters; c++) t += (this._pageCounts[c] || 0);
+    return t;
+  };
+  // The reader's absolute page number = pages in all prior chapters + page in
+  // this chapter. Needs the current chapter's count to be known (it always is —
+  // it's the one being read). Returns 0 if totals aren't ready for prior chapters.
+  Paged.prototype.absolutePage = function () {
+    if (!this._pageCounts) return 0;
+    var before = 0;
+    for (var c = 0; c < this._curChapter; c++) {
+      if (this._pageCounts[c] == null) return 0;       // prior chapter not counted yet
+      before += this._pageCounts[c];
+    }
+    return before + (this._pageIdx + 1);
   };
 
   // Find which page in the current chapter contains token position `pos`.
@@ -327,18 +438,31 @@
     return Math.round((this.firstIndex || 0) / total * 100);
   };
 
-  // Page X of Y within the chapter, plus overall %.
-  Paged.prototype.pageInfo = function () {
+  // Page X of Y within the chapter, plus overall % and (when totals are ready)
+  // absolute page number, total pages, and pages left in the current chapter.
+  Paged.prototype.pageInfo = function (numChapters) {
+    if (numChapters == null) numChapters = this._numChapters;
     var t = this.tokens[this.startPos];
-    return {
+    var pagesInCh = this._pages.length || 1;
+    var info = {
       pct: this.locationPct(),
       pageInChapter: this._pageIdx + 1,
-      pagesInChapter: this._pages.length || 1,
+      pagesInChapter: pagesInCh,
+      pagesLeftInChapter: Math.max(0, pagesInCh - (this._pageIdx + 1)),
       startIndex: this.firstIndex || 0,
       chapter: t ? t.chapter : 0,
       atStart: (this.startPos || 0) <= 0,
-      atEnd: this.endPos >= this.tokens.length
+      atEnd: this.endPos >= this.tokens.length,
+      totalPages: 0,
+      absolutePage: 0,
+      totalsReady: false
     };
+    if (numChapters != null) {
+      info.totalsReady = this._totalsReady(numChapters);
+      info.totalPages = this.totalPages(numChapters);
+      info.absolutePage = this.absolutePage();
+    }
+    return info;
   };
 
   Paged.prototype.enableTaps = function () {

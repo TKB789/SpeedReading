@@ -354,6 +354,13 @@
         fullyLoaded = true;        // global token count is now exact → % is exact
         updateScrubMax();
         if (engine) onState(engine.snapshot());
+        // Now that every chapter is tokenized, compute total page counts in the
+        // background (per-chapter, time-sliced). This populates "page N of TOTAL".
+        if (paged && book && book.chapters) {
+          paged.computeTotals(book.chapters.length, function () {
+            refreshPagedStatus();   // refresh as counts arrive and when final
+          });
+        }
       }
     }
 
@@ -428,15 +435,7 @@
       onWordTap: handlePageTap,
       onPageChange: function (info) {
         var meta = document.getElementById('pageNum');
-        if (meta) {
-          // Apple-Books-style: "Page X of Y · N% read". The page count is within
-          // the current chapter (stable, re-flows on font change); the % is the
-          // whole-book position.
-          var pages = (info.pagesInChapter > 0)
-            ? 'Page ' + info.pageInChapter + ' of ' + info.pagesInChapter + ' \u00b7 '
-            : '';
-          meta.textContent = pages + info.pct + '% read';
-        }
+        if (meta) meta.textContent = pagedStatusText(info);
         setTopChapter(info.chapter);
       }
     });
@@ -445,6 +444,7 @@
     // top of each chapter (e.g. "CHAPTER 1. Loomings."). Indexed by chapter num.
     if (book && book.chapters) {
       paged.setChapterTitles(book.chapters.map(function (c) { return c.title; }));
+      paged.setChapterCount(book.chapters.length);
     }
     // Window the opening screen at the resumed position. No full-book build.
     paged.buildWhenReady(tokens, function () {
@@ -459,8 +459,9 @@
     setupTapPrompt();
     setupPaneToggle();
 
-    // On resize the page box changes, so re-window the current screen. Windowed
-    // layout means this is one screen of work, not a re-pagination of the book.
+    // On resize the page box changes, so re-paginate the current chapter (one
+    // chapter of work) and recompute total pages in the background at the new
+    // size, since every chapter re-flows.
     var rzTimer = null;
     window.addEventListener('resize', function () {
       clearTimeout(rzTimer);
@@ -468,8 +469,32 @@
         var anchor = engine ? engine.index : 0;
         paged.goToIndex(anchor);
         if (currentView === 'rsvp') paged.follow(anchor);
+        // Totals are size-specific; recompute if the book is fully tokenized.
+        if (fullyLoaded && paged && book && book.chapters) {
+          paged.cancelTotals();
+          paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
+        }
       }, 200);
     });
+  }
+
+  // Format the paged status line from a pageInfo object. Until the background
+  // total-page pass is done, show just the percent; once ready, show
+  // "N of TOTAL (P%) — K pages left in chapter".
+  function pagedStatusText(info) {
+    if (info.totalsReady && info.totalPages > 0 && info.absolutePage > 0) {
+      var left = info.pagesLeftInChapter;
+      var leftStr = (left === 1) ? '1 page left in chapter'
+                                 : left + ' pages left in chapter';
+      return info.absolutePage + ' of ' + info.totalPages +
+        ' (' + info.pct + '%) \u2014 ' + leftStr;
+    }
+    return info.pct + '% read';
+  }
+  function refreshPagedStatus() {
+    if (currentView === 'rsvp' || !paged) return;
+    var meta = document.getElementById('pageNum');
+    if (meta) meta.textContent = pagedStatusText(paged.pageInfo());
   }
 
   // Switch between paged ('read') and speed-read ('rsvp'). Never autoplays.
