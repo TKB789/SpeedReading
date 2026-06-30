@@ -81,19 +81,25 @@
       // by the reader once the book is fully loaded). Use that cached pct; if it
       // isn't known yet, show no percentage rather than a wrong one.
       var pct = progress && progress.pct != null ? progress.pct : null;
+      var isLoading = !!b.loading;
+      if (isLoading) card.classList.add('loading-book');
       card.innerHTML =
         (b._user ? '<button class="del" title="Remove" aria-label="Remove book">✕</button>' : '') +
         '<div class="cover"' + coverStyle + '></div>' +
         '<h3></h3><div class="author"></div>' +
         '<div class="meta">' +
-          '<span>' + (b.wordCount ? b.wordCount.toLocaleString() + ' words' : '') + '</span>' +
-          (b.sample ? '<span class="tag sample">sample</span>' : '') +
-          (pct != null ? '<span class="tag">' + pct + '% read</span>' :
-            (progress ? '<span class="tag">in progress</span>' : '')) +
+          '<span>' + (isLoading ? '' : (b.wordCount ? b.wordCount.toLocaleString() + ' words' : '')) + '</span>' +
+          (isLoading ? '<span class="tag loading-tag">loading…</span>' :
+            (b.sample ? '<span class="tag sample">sample</span>' : '')) +
+          (!isLoading && pct != null ? '<span class="tag">' + pct + '% read</span>' :
+            (!isLoading && progress ? '<span class="tag">in progress</span>' : '')) +
         '</div>';
       card.querySelector('h3').textContent = b.title;
       card.querySelector('.author').textContent = b.author || '';
-      function open() { location.href = bookHref(b.id, b._user ? 'user' : 'repo'); }
+      function open() {
+        if (isLoading) return; // not ready yet — chapters still parsing
+        location.href = bookHref(b.id, b._user ? 'user' : 'repo');
+      }
       card.addEventListener('click', function (e) {
         if (e.target.classList.contains('del')) return;
         open();
@@ -188,14 +194,54 @@
     var isEpub = /\.epub$/i.test(f.name) || f.type === 'application/epub+zip';
     if (isEpub) {
       if (typeof EpubParser === 'undefined') { fail('EPUB support failed to load. Reload the page and try again.'); return; }
-      // EPUB parsing runs in a Web Worker so the page stays responsive. Show a
-      // live progress count as chapters stream in.
+      // EPUB parsing runs in a Web Worker so the page stays responsive. As soon
+      // as the title/author are known (onMeta), we add the book to the library
+      // with a "loading" placeholder and close the dialog — the chapters keep
+      // parsing in the background and the card fills in when ready.
       errEl.textContent = 'Reading EPUB…'; errEl.hidden = false;
-      EpubParser.parse(f, fb, function (doneN, total) {
-        if (total) errEl.textContent = 'Reading EPUB… ' + Math.round(doneN / total * 100) + '%';
+      var placeholderId = null;
+      EpubParser.parse(f, fb, {
+        onMeta: function (info) {
+          placeholderId = 'u-' + Date.now().toString(36);
+          var stub = {
+            id: placeholderId, _user: true, loading: true,
+            title: info.title, author: info.author,
+            wordCount: 0, chapters: []
+          };
+          // Save a lightweight stub so the card appears immediately.
+          try { Store.saveUserBook(stub); } catch (e) {}
+          // Reset the form and show the library right away.
+          closeDrawer(addDrawer);
+          fileInput.value = '';
+          document.getElementById('tTitle').value = '';
+          document.getElementById('tAuthor').value = '';
+          load();
+        },
+        onProgress: function (doneN, total) {
+          // (Drawer is already closed; progress could drive a card spinner later.)
+        }
       }).then(function (book) {
-        errEl.hidden = true; finish(book);
-      }).catch(function (e) { fail(e && e.message ? e.message : 'Could not read that EPUB.'); });
+        try {
+          if (!book.chapters.length || !book.wordCount) throw new Error('No readable text found in that file.');
+          // Reuse the placeholder id so the loading card upgrades in place.
+          book.id = placeholderId || ('u-' + Date.now().toString(36));
+          book._user = true;
+          book.loading = false;
+          var ok = Store.saveUserBook(book);
+          if (!ok) throw new Error('Could not save — browser storage may be full or blocked.');
+          load();
+        } catch (e) {
+          // Parsing failed after the stub was shown: remove the stub and report.
+          if (placeholderId) { try { Store.deleteUserBook(placeholderId); } catch (e2) {} load(); }
+          // The drawer is closed, so surface the error via a transient alert.
+          alert(e.message);
+        }
+      }).catch(function (e) {
+        if (placeholderId) { try { Store.deleteUserBook(placeholderId); } catch (e2) {} load(); }
+        var msg = e && e.message ? e.message : 'Could not read that EPUB.';
+        if (errEl) { fail(msg); }
+        else { alert(msg); }
+      });
     } else {
       var reader = new FileReader();
       reader.onload = function () {
@@ -243,6 +289,19 @@
     };
     r.readAsText(f);
   });
+
+  // On a fresh page load, remove any "loading" stubs left over from an EPUB
+  // whose parse never finished (e.g. the tab was closed mid-parse). They can't
+  // resume — the uploaded File is gone — so a stuck "loading…" card would be
+  // dead. Done once at startup, not on in-session load() refreshes.
+  (function cleanOrphanLoadingStubs() {
+    try {
+      var lib = Store.getUserLibrary();
+      lib.forEach(function (b) {
+        if (b && b.loading) { try { Store.deleteUserBook(b.id); } catch (e) {} }
+      });
+    } catch (e) {}
+  })();
 
   load();
 })();

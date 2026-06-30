@@ -27,7 +27,12 @@ var JSZIP_READY = false;
 
 function ensureJSZip(base) {
   if (JSZIP_READY) return;
-  importScripts(base + 'js/vendor/jszip.min.js?v=1782900000');
+  // Try the CDN first (no manual file needed); fall back to a local copy.
+  try {
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  } catch (e) {
+    importScripts(base + 'js/vendor/jszip.min.js?v=1782920000');
+  }
   JSZIP_READY = true;
 }
 

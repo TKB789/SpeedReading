@@ -276,16 +276,22 @@
 
   // Worker-driven parse: the worker unzips off the main thread and streams back
   // each chapter's raw XHTML; we do the light DOM→paragraph step here, yielding
-  // between docs so the UI never freezes. `onProgress(done, total)` is optional.
-  function parseWithWorker(file, fallback, onProgress) {
+  // between docs so the UI never freezes. `opts` may be a function (legacy
+  // onProgress(done,total)) or an object { onProgress, onMeta }. onMeta fires as
+  // soon as the title/author/chapter-count are known — BEFORE chapters are
+  // parsed — so the caller can show the book in the library right away.
+  function parseWithWorker(file, fallback, opts) {
     fallback = fallback || {};
+    var onProgress = typeof opts === 'function' ? opts : (opts && opts.onProgress);
+    var onMeta = opts && opts.onMeta;
     return new Promise(function (resolve, reject) {
       var worker;
       try {
-        worker = new Worker(siteBase() + 'js/epub-worker.js?v=1782900000');
+        worker = new Worker(siteBase() + 'js/epub-worker.js?v=1782920000');
       } catch (e) { reject(e); return; }
 
       var meta = { title: null, author: null, count: 0 };
+      var metaFired = false;
       var docs = [];            // index → { path, xhtml }
       var opfPath = null;
       var navData = null, ncxData = null;
@@ -340,6 +346,14 @@
         var m = e.data || {};
         if (m.type === 'meta') {
           meta.title = m.title; meta.author = m.author; meta.count = m.count;
+          if (onMeta && !metaFired) {
+            metaFired = true;
+            onMeta({
+              title: meta.title || fallback.title || 'Untitled',
+              author: meta.author || fallback.author || 'Unknown',
+              chapterCount: meta.count || 0
+            });
+          }
         } else if (m.type === 'doc') {
           docs[m.index] = { path: m.path, xhtml: m.xhtml };
           received++;
@@ -365,16 +379,17 @@
 
   // Public entry. Uses a Web Worker so the page stays responsive while a large
   // EPUB unzips; falls back to the main-thread parser if Workers (or the worker
-  // file) aren't available. `onProgress(done, total)` is optional.
-  function parse(file, fallback, onProgress) {
+  // file) aren't available. `opts` may be a function (legacy onProgress) or an
+  // object { onProgress, onMeta }.
+  function parse(file, fallback, opts) {
     if (typeof root.Worker !== 'undefined') {
-      return parseWithWorker(file, fallback, onProgress)
+      return parseWithWorker(file, fallback, opts)
         .catch(function (e) {
           // Any worker problem (CSP, file 404, etc.) → graceful main-thread path.
-          return parseSync(file, fallback, onProgress);
+          return parseSync(file, fallback, opts);
         });
     }
-    return parseSync(file, fallback, onProgress);
+    return parseSync(file, fallback, opts);
   }
 
   var api = { parse: parse, parseSync: parseSync };
