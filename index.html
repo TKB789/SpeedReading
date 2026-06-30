@@ -46,10 +46,11 @@
 <div class="drawer-backdrop" id="addDrawer" role="dialog" aria-modal="true" aria-labelledby="addTitle">
   <div class="drawer">
     <h2 id="addTitle">Add a book</h2>
-    <p>Upload a plain-text (.txt) file from Project Gutenberg. The file is parsed and stored in this browser only.</p>
+    <p>Upload a plain-text (.txt) file from Project Gutenberg, or an EPUB (.epub).
+      The file is parsed and stored in this browser only.</p>
     <div class="field">
-      <label for="file">Gutenberg .txt file</label>
-      <input id="file" type="file" accept=".txt,text/plain">
+      <label for="file">Book file (.txt or .epub)</label>
+      <input id="file" type="file" accept=".txt,text/plain,.epub,application/epub+zip">
     </div>
     <div class="field">
       <label for="tTitle">Title (optional — read from file if blank)</label>
@@ -89,6 +90,8 @@
 </div>
 
 <script src="js/parser.js?v=1782800000"></script>
+<script src="js/vendor/jszip.min.js?v=1782800000"></script>
+<script src="js/epub.js?v=1782800000"></script>
 <script src="js/storage.js?v=1782800000"></script>
 <script src="js/library.js?v=1782800000"></script>
 </body>
