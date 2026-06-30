@@ -239,10 +239,23 @@
   Paged.prototype._ensureChapterPaginated = function (chapter, hintPos) {
     var sizeChanged = this.pageEl.clientHeight !== this._builtH ||
                       this.pageEl.clientWidth !== this._builtW;
-    if (this._curChapter !== chapter || sizeChanged || !this._pages.length) {
+    if (this._dirty || this._curChapter !== chapter || sizeChanged || !this._pages.length) {
+      this._dirty = false;
       return this._paginateChapter(chapter, hintPos);
     }
     return true;
+  };
+
+  // Force a re-pagination on the next render, even if the box dimensions are
+  // unchanged. A FONT change re-flows the text without changing the box size, so
+  // size-based detection misses it — callers use this to force the reflow and to
+  // drop the now-stale per-chapter page-count cache.
+  Paged.prototype.invalidate = function () {
+    this._dirty = true;
+    this._pages = [];
+    this._curChapter = -1;
+    this._pageCounts = {};
+    this._countsSig = null;
   };
 
   // ---- TOTAL pages across the whole book -----------------------------------

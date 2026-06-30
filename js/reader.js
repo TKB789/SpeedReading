@@ -51,15 +51,19 @@
       if (btn) btn.setAttribute('aria-checked', String(btn.dataset.size === size));
     });
     if (repaginate && paged) {
-      // Font size changed → pages re-flow. Re-paginate the current chapter and
-      // recompute total pages at the new size (counts are size-specific).
+      // Font size changed → text re-flows but the page BOX size is unchanged, so
+      // box-based change-detection would miss it. Force a fresh pagination, and
+      // wait one frame so the new font CSS is applied before we measure.
+      paged.invalidate();
       var anchor = engine ? engine.index : 0;
-      paged.goToIndex(anchor);
-      if (currentView === 'rsvp') paged.follow(anchor);
-      if (fullyLoaded && book && book.chapters) {
-        paged.cancelTotals();
-        paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
-      }
+      (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
+        paged.goToIndex(anchor);
+        if (currentView === 'rsvp') paged.follow(anchor);
+        if (fullyLoaded && book && book.chapters) {
+          paged.cancelTotals();
+          paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
+        }
+      });
     }
   }
   function setFontSize(size) {
