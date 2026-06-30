@@ -74,9 +74,12 @@ body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: 
    reading-pane strip, rail, and controls) is a centered group: leftover space
    becomes equal top/bottom margin rather than gaps stretched between rows. This
    keeps every control — including the WPM slider — together and visible, and
-   makes hiding the text simply re-center the smaller group. */
-body.reader-page #rsvpView { overflow: hidden; display: flex; flex-direction: column;
-  flex: 1; min-height: 0; justify-content: center; gap: 6px; }
+   makes hiding the text simply re-center the smaller group.
+   IMPORTANT: scoped to mode-rsvp so #rsvpView stays hidden (via [hidden]) in page
+   mode — an unscoped display:flex here would override [hidden] and leak the
+   speed-read controls into the paged reader. */
+body.reader-page.mode-rsvp #rsvpView { overflow: hidden; display: flex;
+  flex-direction: column; flex: 1; min-height: 0; justify-content: center; gap: 6px; }
 /* The reading-pane context strip above the rail keeps its previous size. */
 body.mode-rsvp #pagedView { flex: 0 0 auto; height: 26vh; min-height: 140px;
   max-height: 26vh; display: flex; flex-direction: column; }
