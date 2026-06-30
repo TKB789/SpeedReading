@@ -260,6 +260,15 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
   letter-spacing: 0.06em; color: var(--fg-dim); padding: 6px 12px 2px; }
 .menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
 .menu-select { width: calc(100% - 8px); margin: 2px 4px 4px; }
+/* Segmented control (Text size). Three equal buttons; the active one is filled. */
+.menu-segmented { display: flex; gap: 4px; margin: 2px 4px 4px; }
+.seg-btn { flex: 1 1 0; padding: 8px 4px; text-align: center; cursor: pointer;
+  font-family: var(--font-ui); font-size: 0.9rem; color: var(--fg);
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+  transition: background .12s, color .12s, border-color .12s; }
+.seg-btn:hover { border-color: var(--rubric); }
+.seg-btn[aria-checked="true"] { background: var(--rubric); color: #f5ecd8;
+  border-color: var(--rubric); font-weight: 600; }
 
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -273,10 +282,16 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
   height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   padding: clamp(16px, 4vw, 32px) clamp(10px, 3vw, 28px);
-  font-size: clamp(1.02rem, 3.6vw, 1.2rem); line-height: 1.66;
+  font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem)); line-height: 1.66;
   overflow-wrap: break-word;
   touch-action: pan-y;   /* allow vertical scroll gestures; we handle horizontal swipes */
 }
+/* Text size presets (Settings → Text size). "Small" is the default fluid size;
+   Medium and Large scale up. Applied on <body> so the chosen size cascades into
+   the page font variable; re-pagination on change recomputes pages at that size. */
+body.font-small  { --page-font: clamp(1.02rem, 3.6vw, 1.2rem); }
+body.font-medium { --page-font: clamp(1.16rem, 4.2vw, 1.4rem); }
+body.font-large  { --page-font: clamp(1.32rem, 4.9vw, 1.62rem); }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
 /* Chapter heading shown at the top of each chapter in the paged reader. */
@@ -300,10 +315,24 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
-/* Arrows removed from the layout — page turns are by swipe now. Kept in the DOM
-   (collapsed) so existing handlers and keyboard/AT access still function. */
-.page-edge { flex: 0 0 0; width: 0; overflow: hidden; border: none; background: transparent;
-  padding: 0; margin: 0; color: transparent; pointer-events: none; }
+/* Page-turn tap zones. Invisible strips overlaid on the left/right edges of the
+   page (over its outer padding/margin), so tapping near an edge turns the page
+   while taps in the center still reach words. They overlay rather than take
+   layout space, so the page keeps its full width. Swipe also works. */
+.page-edge {
+  position: absolute; top: 0; bottom: 0; width: 14%; max-width: 90px;
+  border: none; background: transparent; padding: 0; margin: 0;
+  color: transparent; cursor: pointer; z-index: 5;
+  -webkit-tap-highlight-color: transparent;
+}
+.page-edge.left { left: 0; }
+.page-edge.right { right: 0; }
+/* A faint affordance only while the page is pressed, so the zones are learnable
+   without being intrusive. */
+.page-edge:active { background: linear-gradient(to var(--edge-dir, right),
+  color-mix(in srgb, var(--rubric) 12%, transparent), transparent); }
+.page-edge.left:active { --edge-dir: right; }
+.page-edge.right:active { --edge-dir: left; }
 .page-meta { display: flex; justify-content: space-between; align-items: baseline;
   margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
 .page-meta .hint { font-size: 0.74rem; }
