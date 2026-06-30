@@ -283,6 +283,24 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
+/* Chapter heading shown at the top of each chapter in the paged reader. */
+.pg-chapter-title {
+  font-family: var(--font-body); font-weight: 600;
+  font-size: clamp(1.1rem, 4vw, 1.35rem); line-height: 1.3;
+  color: var(--rubric); margin: 0 0 0.7em; padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--line);
+}
+.pg-chapter-title + .pg-para { text-indent: 0; }
+/* Speed-read landing highlight: marks the word you were on, then fades. */
+.pg-word.pg-active {
+  background: var(--rubric, #b54a35);
+  color: #fff; border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--rubric, #b54a35);
+  transition: background 1.4s ease, color 1.4s ease, box-shadow 1.4s ease;
+}
+.pg-word.pg-active.pg-active-fade {
+  background: transparent; color: inherit; box-shadow: none;
+}
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
