@@ -287,34 +287,81 @@
     });
 
     var nextChAfter, nextChBefore;
+    var loadedFromCache = false;
 
-    if (isDeepResume) {
-      var rc = Math.min(resumeCoord.chapter, b.chapters.length - 1);
-      var resumeToks = tokenizeRange(rc, 1);
-      for (var ri = 0; ri < resumeToks.length; ri++) tokens.push(resumeToks[ri]);
-      indexChapters();
-      var startIdx = Coords.resolve(tokens, resumeCoord, chapterStart);
-      engine.index = startIdx < 0 ? 0 : startIdx;
-      nextChAfter = rc + 1;
-      nextChBefore = rc - 1;
-    } else {
-      var first = tokenizeRange(0, Math.min(FIRST_CHUNK, b.chapters.length));
-      for (var fi = 0; fi < first.length; fi++) tokens.push(first[fi]);
-      indexChapters();
-      engine.index = 0;
-      nextChAfter = Math.min(FIRST_CHUNK, b.chapters.length);
-      nextChBefore = -1;
+    // Fast path: if this book's full tokenization is cached (from a prior open),
+    // load it directly and skip ALL re-tokenization — this removes the reopen lag.
+    // The cache is async (IndexedDB); we kick off a check, and if it misses (or
+    // isn't available) we fall back to the normal incremental tokenization.
+    function beginLoad() {
+      if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
+        TokenCache.get(bookId).then(function (cached) {
+          if (cached && cached.length) { loadFromCache(cached); }
+          else { beginIncremental(); }
+        }).catch(function () { beginIncremental(); });
+      } else {
+        beginIncremental();
+      }
     }
 
-    updateScrubMax();
+    // Load a fully-tokenized book from cache in one shot, then go live.
+    function loadFromCache(cached) {
+      loadedFromCache = true;
+      for (var i = 0; i < cached.length; i++) tokens.push(cached[i]);
+      indexChapters();
+      if (isDeepResume) {
+        var startIdx = Coords.resolve(tokens, resumeCoord, chapterStart);
+        engine.index = startIdx < 0 ? 0 : startIdx;
+      } else {
+        engine.index = 0;
+      }
+      fullyLoaded = true;            // the whole book is present immediately
+      goLive();
+      updateScrubMax();
+      if (engine) onState(engine.snapshot());
+      // Totals can compute right away since every chapter is present.
+      if (paged && book && book.chapters) {
+        paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
+      }
+    }
 
-    // Build the paged reader and paint the opening screen NOW.
-    setupPaged();
-    renderWord(engine.current(), engine.snapshot());
-    onState(engine.snapshot());
-    wireControls();
-    switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
-    loadDone();   // reader is live and interactive; tear down the loading UI
+    // Normal path: tokenize the resume/opening chapter now, stream the rest.
+    function beginIncremental() {
+      if (isDeepResume) {
+        var rc = Math.min(resumeCoord.chapter, b.chapters.length - 1);
+        var resumeToks = tokenizeRange(rc, 1);
+        for (var ri = 0; ri < resumeToks.length; ri++) tokens.push(resumeToks[ri]);
+        indexChapters();
+        var startIdx = Coords.resolve(tokens, resumeCoord, chapterStart);
+        engine.index = startIdx < 0 ? 0 : startIdx;
+        nextChAfter = rc + 1;
+        nextChBefore = rc - 1;
+      } else {
+        var first = tokenizeRange(0, Math.min(FIRST_CHUNK, b.chapters.length));
+        for (var fi = 0; fi < first.length; fi++) tokens.push(first[fi]);
+        indexChapters();
+        engine.index = 0;
+        nextChAfter = Math.min(FIRST_CHUNK, b.chapters.length);
+        nextChBefore = -1;
+      }
+      goLive();
+      afterDone = !(nextChAfter < b.chapters.length);
+      beforeDone = !(nextChBefore >= 0);
+      setTimeout(streamForward, 0);
+      setTimeout(streamBackward, 0);
+    }
+
+    // Paint the opening screen and make the reader interactive (shared by both
+    // load paths).
+    function goLive() {
+      updateScrubMax();
+      setupPaged();
+      renderWord(engine.current(), engine.snapshot());
+      onState(engine.snapshot());
+      wireControls();
+      switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
+      loadDone();
+    }
 
     // --- Background streaming, forward then backward, time-sliced. Each chunk
     // PRESERVES the reader's position by coordinate: we remember the current
@@ -396,13 +443,20 @@
       setTimeout(streamBackward, 0);
     }
 
-    var afterDone = !(nextChAfter < b.chapters.length);
-    var beforeDone = !(nextChBefore >= 0);
+    // Streaming-completion flags. Set by beginIncremental (and the stream loops);
+    // in the cache path they stay true since there's nothing to stream.
+    var afterDone = true, beforeDone = true;
     function maybeFullyLoaded() {
       if (afterDone && beforeDone && !fullyLoaded) {
         fullyLoaded = true;        // global token count is now exact → % is exact
         updateScrubMax();
         if (engine) onState(engine.snapshot());
+        // Persist the fully-tokenized book so the NEXT open skips re-tokenizing
+        // (the main reopen lag). Tokens are in chapter order here. Fire-and-forget
+        // — caching is a pure optimization; failure just means we re-tokenize.
+        if (!loadedFromCache && typeof TokenCache !== 'undefined' && TokenCache.available()) {
+          try { TokenCache.put(bookId, tokens.slice()); } catch (e) {}
+        }
         // Now that every chapter is tokenized, compute total page counts in the
         // background (per-chapter, time-sliced). This populates "page N of TOTAL".
         if (paged && book && book.chapters) {
@@ -423,9 +477,8 @@
       updateScrubMax();
     };
 
-    if (nextChAfter < b.chapters.length) setTimeout(streamForward, 0); else afterDone = true;
-    if (nextChBefore >= 0) setTimeout(streamBackward, 0); else beforeDone = true;
-    maybeFullyLoaded();
+    // Kick off loading: cache fast-path if available, else incremental tokenize.
+    beginLoad();
   }
 
   // ---- position helpers (module scope; used across setup + controls) ----
