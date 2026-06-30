@@ -70,16 +70,16 @@ a { color: inherit; }
 body.reader-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: column;
   padding: 14px 18px 14px; overflow: hidden; }
-/* Speed-read view fills the available height and never scrolls: the context
-   pane flexes to take leftover room (capped), while the rail + controls keep
-   their size and stay visible. */
+/* Speed-read view fills the available height and never scrolls. The reading-pane
+   context strip keeps its original size; the rail is a fixed, comfortable height;
+   the controls sit below. Leftover space is distributed (space-between) so it
+   doesn't pool as dead space at the bottom. */
 body.reader-page #rsvpView { overflow: hidden; display: flex; flex-direction: column;
-  flex: 1; min-height: 0; }
-/* In speed-read mode, the page panel is a capped context strip above the rail;
-   it does NOT grow, so the rail + controls get the remaining height. */
-body.mode-rsvp #pagedView { flex: 0 1 auto; min-height: 0; max-height: 34vh;
-  display: flex; flex-direction: column; }
-body.mode-rsvp .page-frame { flex: 1 1 auto; height: auto; min-height: 90px; }
+  flex: 1; min-height: 0; justify-content: flex-start; }
+/* The reading-pane context strip above the rail keeps its previous size. */
+body.mode-rsvp #pagedView { flex: 0 0 auto; height: 30vh; min-height: 160px;
+  max-height: 30vh; display: flex; flex-direction: column; }
+body.mode-rsvp .page-frame { flex: 1 1 auto; height: auto; min-height: 0; }
 body.mode-rsvp .page-meta { display: none; }
 /* Collapsed reading pane: hide the page strip; rail takes the room. */
 body.mode-rsvp.pane-collapsed #pagedView { display: none; }
@@ -188,11 +188,12 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .reader-head h1 { font-family: var(--font-body); font-weight: 600; font-size: 1.5rem; margin: 0; }
 .reader-head .author { color: var(--fg-dim); font-size: 0.98rem; font-style: italic; }
 
-/* The folio panel + rail. Height flexes (with sensible bounds) so the whole
-   speed-read column fits the viewport without scrolling. */
+/* The folio panel + rail. A moderate fixed height (shrinks a little on short
+   screens) so the word box stays a comfortable size and the controls fit below
+   without a tall empty box. */
 .rail {
-  position: relative; height: var(--rail-h);
-  flex: 1 1 auto; min-height: 120px; max-height: var(--rail-h);
+  position: relative; height: clamp(150px, 24vh, var(--rail-h));
+  flex: 0 0 auto;
   background: var(--bg-2);
   border: 1px solid var(--line); border-radius: var(--radius);
   margin: 12px 0; display: flex; align-items: center; justify-content: center;
@@ -212,8 +213,10 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .idle { color: var(--fg-dim); font-family: var(--font-body); font-style: italic;
   font-size: 1.1rem; padding: 0 24px; text-align: center; }
 
-/* Controls. flex:0 0 auto so they keep their size while the rail/pane flex. */
+/* Controls. In speed-read mode they grow to fill the space below the rail and
+   distribute their rows, so leftover height isn't dead space at the bottom. */
 .controls { display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto; }
+body.mode-rsvp .controls { flex: 1 1 auto; justify-content: space-evenly; gap: 8px; }
 .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
 .transport button { font-size: 1rem; padding: 10px 16px; }
 .scrub input[type=range] { width: 100%; accent-color: var(--rubric); }
