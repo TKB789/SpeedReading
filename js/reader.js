@@ -21,6 +21,7 @@
     wpmInput: document.getElementById('wpmInput'),
     pauseScale: document.getElementById('pauseScale'),
     pauseVal: document.getElementById('pauseVal'),
+
     pct: document.getElementById('pct'),
     timeleft: document.getElementById('timeleft'),
     settingsBtn: document.getElementById('settingsBtn'),
@@ -259,9 +260,10 @@
 
     settings = Store.getSettings();
     var startWpm = settings.wpm || 400;
-    var startPause = settings.pauseScale != null ? settings.pauseScale : 1;
+    // Pauses are fixed at "longest" (2) — the slider was removed. Always use the
+    // max so sentence/paragraph breaks get the fullest pause.
+    var startPause = 2;
     els.wpm.value = startWpm; els.wpmVal.textContent = startWpm + ' wpm';
-    els.pauseScale.value = startPause; els.pauseVal.textContent = pauseLabel(startPause);
 
     var FIRST_CHUNK = 2;          // chapters before first paint (cold open)
     var REST_CHUNK = 8;           // chapters per background slice
@@ -941,13 +943,6 @@
     els.wpmInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); commitWpmEdit(); }
       else if (e.key === 'Escape') { els.wpmInput.hidden = true; els.wpmVal.hidden = false; }
-    });
-
-    els.pauseScale.addEventListener('input', function () {
-      var v = parseFloat(els.pauseScale.value);
-      els.pauseVal.textContent = pauseLabel(v);
-      engine.setPauseScale(v);
-      settings = Store.getSettings(); settings.pauseScale = v; Store.saveSettings(settings);
     });
 
     // Keyboard: space=play/pause, arrows=step, shift+arrows=±30s
