@@ -272,16 +272,18 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
-  flex: 1; min-height: 0; min-width: 0; }
+.page-frame { position: relative; display: flex; align-items: stretch;
+  flex: 1; min-height: 0; min-width: 0;
+  /* Side gutters hold the page-turn tap zones. The page sits between them, so a
+     gutter tap never lands on text. */
+  padding: 0 clamp(20px, 7vw, 64px); }
 .page {
-  /* Wide reading column: minimal side margins so text fills the screen. The
-     arrows are gone (swipe turns pages instead), so the page spans the frame.
-     overflow-wrap (NOT word-break) only breaks genuinely over-long tokens. */
-  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 52rem; margin: 0 auto;
+  /* Reading column fills the space between the gutters. overflow-wrap (NOT
+     word-break) only breaks genuinely over-long tokens. */
+  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 46rem; margin: 0 auto;
   height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: clamp(16px, 4vw, 32px) clamp(10px, 3vw, 28px);
+  padding: clamp(16px, 4vw, 32px) clamp(12px, 3.5vw, 30px);
   font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem)); line-height: 1.66;
   overflow-wrap: break-word;
   touch-action: pan-y;   /* allow vertical scroll gestures; we handle horizontal swipes */
@@ -315,24 +317,24 @@ body.font-large  { --page-font: clamp(1.32rem, 4.9vw, 1.62rem); }
 .pg-word { cursor: pointer; border-radius: 2px; transition: background .08s, color .08s;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pg-word.picked { background: var(--rubric); color: #f5ecd8; border-radius: 2px; }
-/* Page-turn tap zones. Invisible strips overlaid on the left/right edges of the
-   page (over its outer padding/margin), so tapping near an edge turns the page
-   while taps in the center still reach words. They overlay rather than take
-   layout space, so the page keeps its full width. Swipe also works. */
+/* Page-turn tap zones. Each sits in the blank SIDE GUTTER (and the area off the
+   page toward the screen edge), never over the text — so words near the margin
+   stay selectable while the gutter and off-page area turn the page. The page's
+   own outer padding is blank too, so the zone may extend slightly onto it. Only a
+   small chevron shows; the zone itself is transparent. */
 .page-edge {
-  position: absolute; top: 0; bottom: 0; width: 14%; max-width: 90px;
+  position: absolute; top: 0; bottom: 0; z-index: 5;
+  width: clamp(20px, 7vw, 64px);          /* matches the frame gutter width */
   border: none; background: transparent; padding: 0; margin: 0;
-  color: transparent; cursor: pointer; z-index: 5;
-  -webkit-tap-highlight-color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.page-edge.left { left: 0; }
+.page-edge.left  { left: 0; }
 .page-edge.right { right: 0; }
-/* A faint affordance only while the page is pressed, so the zones are learnable
-   without being intrusive. */
-.page-edge:active { background: linear-gradient(to var(--edge-dir, right),
-  color-mix(in srgb, var(--rubric) 12%, transparent), transparent); }
-.page-edge.left:active { --edge-dir: right; }
-.page-edge.right:active { --edge-dir: left; }
+/* Only the chevron is visible; the button area is invisible. */
+.page-edge .chev { font-size: 1.5rem; color: var(--fg-dim); opacity: 0.55;
+  transition: opacity .12s, color .12s; line-height: 1; }
+.page-edge:active .chev { opacity: 1; color: var(--rubric); }
 .page-meta { display: flex; justify-content: space-between; align-items: baseline;
   margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
 .page-meta .hint { font-size: 0.74rem; }
