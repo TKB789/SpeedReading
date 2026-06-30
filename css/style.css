@@ -181,6 +181,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .tag { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em;
   border: 1px solid var(--line); border-radius: 2px; padding: 2px 7px; }
 .tag.sample { color: var(--rubric); border-color: var(--rubric-soft); }
+/* A book still being parsed in the background: dimmed, not clickable, pulsing tag. */
+.card.loading-book { cursor: default; opacity: 0.7; }
+.card.loading-book:hover { transform: none; box-shadow: none; border-color: var(--line); }
+.tag.loading-tag { color: var(--rubric); border-color: var(--rubric-soft);
+  animation: panePulse 1s ease-in-out infinite; }
 .card .del { position: absolute; top: 10px; right: 10px; padding: 1px 8px; font-size: 0.9rem;
   background: transparent; border-color: transparent; color: var(--fg-dim); }
 .card .del:hover { color: var(--bg); background: var(--rubric); border-color: var(--rubric); }
@@ -290,33 +295,29 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-frame { position: relative; display: flex; align-items: stretch;
+  justify-content: center;
   flex: 1; min-height: 0; min-width: 0;
   /* Thin gutters so the page reaches close to the screen edge. The page-turn tap
      zones cover these gutters PLUS the page's own blank side-padding. */
   padding: 0 clamp(6px, 2vw, 16px); }
 .page {
-  flex: 0 1 auto; min-width: 0; width: 100%; max-width: 48rem; margin: 0 auto;
-  /* Height is locked to a whole number of text lines (set by the reader as
-     --page-box-h) so the box is the SAME height on every page regardless of how
-     much text lands on it. Falls back to filling the frame before measurement. */
-  height: var(--page-box-h, 100%); box-sizing: border-box;
-  overflow: hidden;
+  /* Always fill the frame: width is the available width (capped at 48rem and
+     centered), height is the full frame. flex-basis is the full width, and
+     flex-shrink:0 means the box NEVER narrows to fit its content — even a page
+     with a single word stays the full page size. min-width:0 only guards the
+     inner text wrapping, not the box width (that's pinned by the basis). */
+  flex: 1 0 100%; width: 100%; max-width: 48rem;
+  height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   /* Generous side padding gives a blank band the tap zones can use without ever
      covering a word; vertical padding stays comfortable. */
   padding: clamp(16px, 4vw, 32px) clamp(22px, 6vw, 40px);
-  font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem));
-  /* Unitless line-height so the per-line pixel step is exactly font-size × this
-     — the reader uses that step to compute a whole-line box height. */
-  line-height: 1.66;
+  font-size: var(--page-font, clamp(1.02rem, 3.6vw, 1.2rem)); line-height: 1.66;
   overflow-wrap: break-word;
   touch-action: pan-y;
 }
-/* When the box height is locked to whole lines, center it in the available frame
-   so the leftover sub-line remainder splits evenly top/bottom. Only in paged
-   mode — in speed-read mode the page is a small context strip that should fill. */
-body:not(.mode-rsvp) .page-frame { align-items: center; }
-body.mode-rsvp .page { height: 100%; }
+/* The words inside the page wrap normally and never widen the box. */
+.page .pg-para, .page .pg-word { min-width: 0; max-width: 100%; }
 /* Text size presets (Settings → Text size). "Small" is the default fluid size;
    Medium and Large scale up. Applied on <body> so the chosen size cascades into
    the page font variable; re-pagination on change recomputes pages at that size. */
