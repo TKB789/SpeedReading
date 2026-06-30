@@ -772,9 +772,14 @@
   // Start speed-reading at a given word index.
   function startAt(idx) {
     disarm();
-    engine.seek(idx);
+    // Switch to the speed-read view FIRST so the rail is laid out, THEN seek —
+    // this way the initial word is measured and centred in a visible rail instead
+    // of landing off-centre until Play forces a re-render.
     switchView('rsvp');
+    engine.seek(idx);
     paged.follow(idx);
+    // One more centre pass after the view transition settles.
+    requestAnimationFrame(function () { renderWord(engine.current(), engine.snapshot()); });
   }
 
   function openPageRead() { disarm(); switchView('read'); }
@@ -823,19 +828,36 @@
     els.word.querySelector('.pre').textContent = t.slice(0, p);
     els.word.querySelector('.piv').textContent = t.charAt(p);
     els.word.querySelector('.post').textContent = t.slice(p + 1);
-    // Pin pivot centre to the rail's centre guide. .word's left edge is at
-    // 50% (the guide); shift left by pre-width + half the pivot width, and up
-    // by half the word height for vertical centring.
-    var pre = els.word.querySelector('.pre');
-    var piv = els.word.querySelector('.piv');
-    var shiftX = pre.getBoundingClientRect().width + piv.getBoundingClientRect().width / 2;
-    var shiftY = els.word.getBoundingClientRect().height / 2;
-    els.word.style.transform = 'translate(' + (-shiftX) + 'px, ' + (-shiftY) + 'px)';
+    var centered = centerPivot();
+    // If the rail wasn't laid out yet (word just set while the view was becoming
+    // visible), the measurement was 0/stale and centerPivot() reported false —
+    // re-centre on the next frame once layout settles, so it's centred without
+    // needing to press Play. During normal playback the first measure succeeds,
+    // so no extra frame work is scheduled.
+    if (!centered) requestAnimationFrame(centerPivot);
     if (snap) updateProgressLabel(snap);
     // Keep the paged panel in lockstep with the speed-read word.
     if (currentView === 'rsvp' && paged) {
       paged.follow(snap ? snap.index : engine.index);
     }
+  }
+
+  // Pin the pivot letter's centre to the rail's centre. .word's left edge sits at
+  // 50%; shift left by pre-width + half the pivot width, and up by half the word
+  // height. Skips when widths read as 0 (not laid out yet) so we don't cache a
+  // bad transform — the rAF re-call will catch it once measurable.
+  function centerPivot() {
+    if (!els.word || els.word.hidden) return false;
+    var pre = els.word.querySelector('.pre');
+    var piv = els.word.querySelector('.piv');
+    if (!piv) return false;
+    var pivW = piv.getBoundingClientRect().width;
+    var wordH = els.word.getBoundingClientRect().height;
+    if (pivW === 0 && wordH === 0) return false;   // not laid out yet; wait for rAF
+    var shiftX = pre.getBoundingClientRect().width + pivW / 2;
+    var shiftY = wordH / 2;
+    els.word.style.transform = 'translate(' + (-shiftX) + 'px, ' + (-shiftY) + 'px)';
+    return true;
   }
 
   function chapterName(i) {
