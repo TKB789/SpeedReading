@@ -75,6 +75,7 @@
       card.className = 'card';
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
+      card.dataset.bookId = b.id;
       var coverStyle = b.cover ? ' style="background-image:url(' + b.cover + ')"' : '';
       var progress = Store.getProgress(b.id);
       // Progress is stored as a content coordinate plus a cached `pct` (computed
@@ -137,6 +138,22 @@
         (sorted.length === 1 ? ' book' : ' books') +
         (q ? ' matching “' + searchEl.value.trim() + '”' : '');
     }
+    // If an upload asked us to reveal a specific book, scroll its card into view
+    // and flash it. Cleared after one use so normal renders don't keep jumping.
+    if (pendingScrollId) {
+      var id = pendingScrollId; pendingScrollId = null;
+      requestAnimationFrame(function () { scrollToBook(id); });
+    }
+  }
+
+  var pendingScrollId = null;
+  function scrollToBook(id) {
+    var card = grid.querySelector('.card[data-book-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (!card) return;
+    try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    catch (e) { card.scrollIntoView(); }
+    card.classList.add('just-added');
+    setTimeout(function () { card.classList.remove('just-added'); }, 1800);
   }
   searchEl.addEventListener('input', applySearch);
   sortEl.addEventListener('change', function () {
@@ -186,6 +203,7 @@
         if (!ok) throw new Error('Could not save — browser storage may be full or blocked.');
         closeDrawer(addDrawer);
         fileInput.value = ''; document.getElementById('tTitle').value = ''; document.getElementById('tAuthor').value = '';
+        pendingScrollId = book.id;
         load();
       } catch (e) { errEl.textContent = e.message; errEl.hidden = false; }
     }
@@ -210,6 +228,7 @@
           };
           // Save a lightweight stub so the card appears immediately.
           try { Store.saveUserBook(stub); } catch (e) {}
+          pendingScrollId = placeholderId; // reveal it after the grid re-renders
           // Reset the form and show the library right away.
           closeDrawer(addDrawer);
           fileInput.value = '';
@@ -229,6 +248,15 @@
           book.loading = false;
           var ok = Store.saveUserBook(book);
           if (!ok) throw new Error('Could not save — browser storage may be full or blocked.');
+          // If onMeta never ran (e.g. sync fallback), the drawer is still open and
+          // nothing has scrolled yet — close it and target this book now.
+          if (!placeholderId) {
+            closeDrawer(addDrawer);
+            fileInput.value = '';
+            document.getElementById('tTitle').value = '';
+            document.getElementById('tAuthor').value = '';
+          }
+          pendingScrollId = book.id;
           load();
         } catch (e) {
           // Parsing failed after the stub was shown: remove the stub and report.
