@@ -225,8 +225,8 @@
   },
   {
     "id": "pg31100",
-    "title": "The Complete Project Gutenberg Works of Jane Austen: A Linked Index of all PG Editions of Jane Austen",
-    "author": "Austen, Jane",
+    "title": "The Complete Project Gutenberg Works of Jane Austen",
+    "author": "Jane Austen",
     "wordCount": 776536,
     "cover": null,
     "source": "Project Gutenberg #31100 — public domain"
@@ -258,7 +258,7 @@
   {
     "id": "pg70854",
     "title": "The Countess of Pembroke's Arcadia",
-    "author": "Sidney, Philip",
+    "author": "Philip Sidney",
     "wordCount": 344922,
     "cover": null,
     "source": "Project Gutenberg #70854 — public domain"
@@ -290,7 +290,7 @@
   {
     "id": "pg564",
     "title": "The Mystery of Edwin Drood",
-    "author": "Dickens, Charles",
+    "author": "Charles Dickens",
     "wordCount": 95616,
     "cover": null,
     "source": "Project Gutenberg #564 — public domain"
@@ -330,7 +330,7 @@
   {
     "id": "pg42",
     "title": "The strange case of Dr. Jekyll and Mr. Hyde",
-    "author": "Stevenson, Robert Louis",
+    "author": "Robert Louis Stevenson",
     "wordCount": 25685,
     "cover": null,
     "source": "Project Gutenberg #42 — public domain"
@@ -346,7 +346,7 @@
   {
     "id": "pg120",
     "title": "Treasure Island",
-    "author": "Stevenson, Robert Louis",
+    "author": "Robert Louis Stevenson",
     "wordCount": 68270,
     "cover": null,
     "source": "Project Gutenberg #120 — public domain"
