@@ -230,13 +230,22 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 .reader-top { gap: 12px; }
 .reader-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
 .ri-title { font-family: var(--font-body); font-weight: 600; font-size: 1rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
-.ri-sep { color: var(--rubric); flex: 0 0 auto; }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+/* Push the chapter name to the right side of the header so the title gets the
+   space it needs. The separator travels with the chapter so it sits beside it. */
+.ri-sep { color: var(--rubric); flex: 0 0 auto; margin-left: auto; }
 .ri-chapter { font-family: var(--font-body); font-size: 0.92rem; color: var(--fg);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  flex: 0 1 auto; text-align: right; }
 .ri-author { font-family: var(--font-body); font-style: italic; font-size: 0.82rem;
   color: var(--fg-dim); white-space: nowrap; flex: 0 0 auto; margin-left: 4px; }
-@media (max-width: 600px) { .ri-author { display: none; } .ri-title { max-width: 34vw; } }
+@media (max-width: 600px) {
+  .ri-author { display: none; }
+  /* On phones the title gets the lion's share; the chapter name keeps a small
+     right-aligned slot and ellipses if needed. */
+  .ri-title { max-width: 58vw; }
+  .ri-chapter { max-width: 30vw; }
+}
 
 /* Settings menu (anchored dropdown via full-screen backdrop) */
 .menu-backdrop { position: fixed; inset: 0; z-index: 60; background: transparent; }
@@ -257,11 +266,20 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-frame { position: relative; display: flex; align-items: stretch; gap: 2px;
-  flex: 1; min-height: 0; }
+  flex: 1; min-height: 0; min-width: 0; }
 .page {
-  flex: 1; height: 100%; overflow: hidden;
+  /* Responsive reading column. On phones it fills the available width between the
+     page-turn arrows; on wider screens it's capped at a comfortable measure
+     (~62rem here gives a normal letter-size text column) and centred, so lines
+     don't stretch uncomfortably wide on desktop. min-width:0 lets it shrink with
+     the viewport; overflow-wrap (NOT word-break) only breaks genuinely over-long
+     tokens, so normal words like "ADVENTURES" never split mid-word. */
+  flex: 1 1 auto; min-width: 0; width: 100%; max-width: 42rem; margin: 0 auto;
+  height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 22px 24px; font-size: 1.16rem; line-height: 1.66;
+  padding: clamp(16px, 4vw, 32px) clamp(18px, 5vw, 40px);
+  font-size: clamp(1.02rem, 3.6vw, 1.2rem); line-height: 1.66;
+  overflow-wrap: break-word;
 }
 .pg-para { margin: 0 0 0.85em; text-indent: 1.3em; }
 .pg-para:first-child { text-indent: 0; }
@@ -276,7 +294,9 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
   margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
 .page-meta .hint { font-size: 0.74rem; }
 @media (max-width: 520px) {
-  .page { padding: 18px 16px; font-size: 1.06rem; }
+  /* Font and padding are handled responsively by clamp() on .page, so we don't
+     hard-override them here anymore (that was fighting the fluid sizing). Only
+     the page-turn arrows shrink slightly and the hint hides on narrow screens. */
   .page-edge { flex-basis: 26px; font-size: 1.4rem; }
   .page-meta .hint { display: none; }
 }
