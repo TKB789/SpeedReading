@@ -162,10 +162,15 @@
     document.title = b.title + ' — RSVP Reader';
     Store.setLastBook(bookId, src);
 
-    // Chapter dropdown
+    // Chapter dropdown. Show each chapter's OWN title verbatim (e.g. "Letter 1",
+    // "Chapter 1", "CHAPTER 5. Breakfast.") — we don't renumber by list position
+    // or strip the chapter number, because that desynced the dropdown from the
+    // book's real chapter labels (a book may open with Letters, a Preface, etc.,
+    // so list position ≠ chapter number).
     b.chapters.forEach(function (c, i) {
       var opt = document.createElement('option');
-      opt.value = i; opt.textContent = (i + 1) + '. ' + c.title.replace(/^CHAPTER\s+[IVXLCDM\d]+\.?\s*—?\s*/i, '');
+      opt.value = i;
+      opt.textContent = c.title || ('Section ' + (i + 1));
       els.chapterSel.appendChild(opt);
     });
 
@@ -688,9 +693,10 @@
   }
 
   function chapterName(i) {
-    if (!book) return '';
-    var raw = book.chapters[i] ? book.chapters[i].title : '';
-    return raw.replace(/^CHAPTER\s+[IVXLCDM\d]+\.?\s*—?\s*/i, '') || ('Chapter ' + (i + 1));
+    if (!book || !book.chapters[i]) return '';
+    // Show the chapter's own title verbatim. Don't strip the number or renumber
+    // by position — the book's label ("Chapter 1", "Letter 1") is authoritative.
+    return book.chapters[i].title || ('Section ' + (i + 1));
   }
 
   function pauseLabel(v) {
