@@ -52,10 +52,14 @@
     });
     if (repaginate && paged) {
       // Font size changed → text re-flows but the page BOX size is unchanged, so
-      // box-based change-detection would miss it. Force a fresh pagination, and
-      // wait one frame so the new font CSS is applied before we measure.
+      // box-based change-detection would miss it. Force a fresh pagination.
+      // Anchor to the word at the CENTER of the current page (not engine.index,
+      // which is the chapter start in paged mode) so the reflow keeps the
+      // reader's focal point steady — words above/below shift, the middle holds.
+      var anchor = (currentView === 'rsvp')
+        ? (engine ? engine.index : 0)
+        : paged.currentAnchor();
       paged.invalidate();
-      var anchor = engine ? engine.index : 0;
       (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
         paged.goToIndex(anchor);
         if (currentView === 'rsvp') paged.follow(anchor);

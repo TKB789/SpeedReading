@@ -451,6 +451,17 @@
     return Math.round((this.firstIndex || 0) / total * 100);
   };
 
+  // The word to keep steady across a re-flow (font change): the one nearest the
+  // CENTER of the current page. After re-pagination we land on whatever page now
+  // contains it, so the reader's focal point stays put while words above/below
+  // shift. Falls back to the page's first word, then 0.
+  Paged.prototype.currentAnchor = function () {
+    if (this.lastIndex >= this.firstIndex && this.firstIndex >= 0) {
+      return Math.floor((this.firstIndex + this.lastIndex) / 2);
+    }
+    return this.firstIndex || 0;
+  };
+
   // Page X of Y within the chapter, plus overall % and (when totals are ready)
   // absolute page number, total pages, and pages left in the current chapter.
   Paged.prototype.pageInfo = function (numChapters) {
