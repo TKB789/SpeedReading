@@ -511,6 +511,84 @@
 
   var paged = null, currentView = 'read';
   var curPageInChapter = null;   // latest page-within-chapter for durable resume
+
+  // ---- Session reading-pace meter -------------------------------------------
+  // Cheap, non-competitive: shows words-per-minute for THIS browser session only
+  // (no persistence, resets on reopen). It accumulates total words read and total
+  // ACTIVE time, then reports words/minute. Paged reading contributes a page's
+  // words when you turn away from it; speed-reading contributes its words as they
+  // play. Time only counts while the tab is visible, and absurd per-page dwell
+  // times (walked away) or too-brief flashes are ignored so the number stays real.
+  var Wpm = (function () {
+    var totalWords = 0, totalMs = 0;
+    var pageWords = 0, pageStart = 0, timing = false;
+    var MIN_MS = 800;              // ignore page flips faster than this (skimming past)
+    // "Walked away" cutoff is computed PER PAGE from a very slow reading floor, so
+    // a genuinely slow or learning reader is never discarded — only true idle time
+    // is. FLOOR_WPM = 60 sits below every published "slow reader" figure (slow
+    // adults ~150 wpm, early/struggling readers ~90–120 wpm), and a 1.5× buffer
+    // adds slack for pauses. So a 275-word page counts up to ~7 min; a short page
+    // proportionally less. Anything slower than this is treated as away-from-desk.
+    var FLOOR_WPM = 60, BUFFER = 1.5, MIN_CUTOFF_MS = 90 * 1000;
+    var blanked = false;   // true right after an idle page → show "--" until next page
+    function maxMsFor(words) {
+      return Math.max(MIN_CUTOFF_MS, (words / FLOOR_WPM) * 60000 * BUFFER);
+    }
+    var hiddenAt = 0;
+
+    function now() { return Date.now(); }
+
+    // Begin timing a paged page that has `words` words on it.
+    function startPage(words) {
+      commit();                    // bank whatever was open before
+      pageWords = words || 0;
+      pageStart = now();
+      timing = pageWords > 0;
+    }    // Bank the currently-open page's words + elapsed active time into the totals.
+    function commit() {
+      if (!timing) { pageStart = 0; return; }
+      var dt = now() - pageStart;
+      timing = false; pageStart = 0;
+      if (pageWords <= 0) return;
+      if (dt < MIN_MS) return;                 // flashed past — ignore, keep number
+      if (dt > maxMsFor(pageWords)) {
+        // Beyond the slowest-reader threshold → treat as walked-away. Don't count
+        // it, and blank the readout to "--" so a stale pace isn't shown; the next
+        // real page turn recomputes and the number returns.
+        blanked = true; render();
+        return;
+      }
+      totalWords += pageWords; totalMs += dt;
+      blanked = false;
+      render();
+    }
+    // Speed-read contributes directly: `words` read over `ms` milliseconds.
+    function addSpeedRead(words, ms) {
+      if (words > 0 && ms > 0) { totalWords += words; totalMs += ms; blanked = false; render(); }
+    }
+    function value() {
+      if (totalMs <= 0) return null;
+      return Math.round(totalWords / (totalMs / 60000));
+    }
+    function render() {
+      var el = document.getElementById('sessionWpm');
+      if (!el) return;
+      var v = value();
+      el.textContent = (blanked || v == null) ? '-- wpm' : (v.toLocaleString() + ' wpm');
+    }
+    // Pause/resume timing with tab visibility so idle background time isn't counted.
+    function onHidden() { if (timing) { hiddenAt = now(); } }
+    function onVisible() {
+      if (timing && hiddenAt) { pageStart += (now() - hiddenAt); hiddenAt = 0; }
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) onHidden(); else onVisible();
+    });
+    window.addEventListener('beforeunload', commit);
+
+    return { startPage: startPage, commit: commit, addSpeedRead: addSpeedRead, render: render };
+  })();
+
   // Tap interaction state: 'idle' (normal) or 'armed' (box outlined, prompt up).
   var tapState = 'idle';
   var selectedIndex = null;   // word chosen while armed (null = none yet)
@@ -525,6 +603,13 @@
         setTopChapter(info.chapter);
         // Remember the exact page within the chapter for durable resume.
         if (info && info.pageInChapter != null) curPageInChapter = info.pageInChapter;
+        // Session pace: when a new page is shown in the read view, bank the time
+        // spent on the previous page and start timing this one. Only in read view
+        // (the paged strip in speed-read mode is driven by the rail, which reports
+        // its own words to the meter separately).
+        if (currentView === 'read' && info && info.wordsOnPage != null) {
+          Wpm.startPage(info.wordsOnPage);
+        }
         // Keep the engine's position in sync with the page the reader is on, so
         // reopening resumes to THIS page. Page turns don't move the RSVP engine
         // on their own, so without this the only saved position was the rail's,
@@ -661,6 +746,9 @@
   // rail starts where the reader's eyes were rather than at the resume point.
   function switchView(view, snapToPage) {
     var cameFromRsvp = (currentView === 'rsvp');
+    // Leaving the read view: bank the currently-open page's reading time so it
+    // isn't lost or wrongly extended across the mode switch.
+    if (currentView === 'read' && view !== 'read') Wpm.commit();
     currentView = view;
     var readView = document.getElementById('pagedView');
     var rsvpView = document.getElementById('rsvpView');
@@ -1006,9 +1094,25 @@
     }
   }
 
+  var _rsvpLastIdx = null, _rsvpLastT = 0;
   function onState(snap) {
     els.play.textContent = snap.playing ? 'Pause' : (snap.index >= snap.total - 1 ? 'Replay' : 'Play');
     updateProgressLabel(snap);
+    // Session pace from speed-reading: while playing, add the words advanced and
+    // the real time elapsed since the last tick to the meter. This reflects the
+    // actual pace (including the gaps between words), and naturally blends with
+    // paged reading in the same words/time pool. Non-forward jumps (seek, replay)
+    // reset the span so a skip doesn't count as instant reading.
+    if (snap.playing && currentView === 'rsvp') {
+      var t = Date.now();
+      if (_rsvpLastIdx != null && snap.index > _rsvpLastIdx && _rsvpLastT) {
+        var dw = snap.index - _rsvpLastIdx, dt = t - _rsvpLastT;
+        if (dt > 0 && dt < 10000) Wpm.addSpeedRead(dw, dt);   // ignore long stalls
+      }
+      _rsvpLastIdx = snap.index; _rsvpLastT = t;
+    } else {
+      _rsvpLastIdx = null; _rsvpLastT = 0;
+    }
     // Debounced progress save — stored as a CONTENT COORDINATE so it resolves on
     // reopen without needing the whole book tokenized first.
     clearTimeout(saveTimer);
