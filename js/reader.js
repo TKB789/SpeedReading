@@ -5,16 +5,6 @@
   var bookId = params.get('book');
   var src = params.get('src') || 'repo';
 
-  // Clear #page's token content but preserve the [data-keep] egg footer, then
-  // re-append it so it stays at the bottom. Used wherever we'd otherwise wipe the
-  // page via innerHTML. Idempotent and safe if no egg exists.
-  function clearPageKeepingEgg(pageEl, html) {
-    if (!pageEl) return;
-    var egg = pageEl.querySelector('[data-keep]');
-    pageEl.innerHTML = html || '';
-    if (egg) pageEl.appendChild(egg);
-  }
-
   var els = {
     title: document.getElementById('bookTitle'),
     author: document.getElementById('bookAuthor'),
@@ -137,7 +127,7 @@
         'style="display:inline-block;padding:8px 16px;border:1px solid var(--rubric);' +
         'border-radius:8px;color:var(--rubric);text-decoration:none">\u2190 Back to library</a>' +
       '</p>';
-    clearPageKeepingEgg(pageEl);
+    pageEl.innerHTML = '';
     pageEl.appendChild(box);
     // The #page area has its own tap handler (paged.enableTaps) that can swallow
     // this click, so don't rely on the <a>'s default navigation. Stop the event
@@ -207,9 +197,9 @@
     if (els.idle) els.idle.textContent = msg;
     // Also show it in the paged panel, which is the visible view by default.
     var pageEl = document.getElementById('page');
-    if (pageEl) clearPageKeepingEgg(pageEl, '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">' +
+    if (pageEl) pageEl.innerHTML = '<p class="pg-para" style="text-indent:0;color:var(--fg-dim);font-style:italic">' +
       msg + '</p><p class="pg-para" style="text-indent:0;color:var(--fg-dim)">' +
-      'Open a book from the <a href="' + LIBRARY_URL + '" style="color:var(--rubric)">Library</a>.</p>');
+      'Open a book from the <a href="' + LIBRARY_URL + '" style="color:var(--rubric)">Library</a>.</p>';
   }
 
   function setup(b) {
