@@ -68,13 +68,6 @@
     "source": "Project Gutenberg #76639 — public domain"
   },
   {
-    "id": "pg84",
-    "title": "Frankenstein; or, the modern prometheus",
-    "author": "Mary Wollstonecraft Shelley",
-    "wordCount": 74919,
-    "source": "Project Gutenberg #84 — public domain"
-  },
-  {
     "id": "frankenstein",
     "title": "Frankenstein; or, the Modern Prometheus",
     "author": "Mary Shelley",
@@ -134,13 +127,6 @@
     "title": "Moby Dick; Or, The Whale",
     "author": "Herman Melville",
     "wordCount": 211406
-  },
-  {
-    "id": "pg2701",
-    "title": "Moby Dick; Or, The Whale",
-    "author": "Herman Melville",
-    "wordCount": 211465,
-    "source": "Project Gutenberg #2701 — public domain"
   },
   {
     "id": "pg47530",
