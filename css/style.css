@@ -301,19 +301,19 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 
 /* Paged reader fills the viewport below the header (no page scroll) */
 #pagedView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-/* The frame is a positioning context for the absolute edge buttons AND the page.
-   It is NOT flex — flex kept letting the page size from its content. It's a plain
-   block that fills the remaining column height; the page is sized against it. */
-.page-frame { position: relative; display: block;
-  flex: 1 1 auto; min-height: 0;
+.page-frame { position: relative; display: flex; align-items: stretch;
+  justify-content: center;
+  flex: 1; min-height: 0; min-width: 0;
+  /* Thin gutters so the page reaches close to the screen edge. The page-turn tap
+     zones cover these gutters PLUS the page's own blank side-padding. */
   padding: 0 clamp(6px, 2vw, 16px); }
 .page {
-  /* Fixed-width centered block. width:100% is measured against the frame's
-     content box (a known width from the viewport), NEVER against the text on the
-     page. No flex is involved, so nothing about the content can change it —
-     whether the page holds one word or a full column, the box is identical. */
-  display: block;
-  width: 100%; max-width: 48rem; margin: 0 auto;
+  /* The page box always fills the frame. It is NOT flex-sized — flex-basis/grow
+     resolution was letting the box track its content width (a page of only short
+     lines came out narrow). Instead it's a fixed-width block: 100% of the frame,
+     capped at 48rem and centered. flex:none takes it out of flex sizing so its
+     width depends only on the frame, never on what text is on the page. */
+  flex: none; width: 100%; max-width: 48rem; align-self: stretch;
   height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   /* Generous side padding gives a blank band the tap zones can use without ever
@@ -325,22 +325,6 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
 }
 /* The words inside the page wrap normally and never widen the box. */
 .page .pg-para, .page .pg-word { min-width: 0; max-width: 100%; }
-/* Hidden Easter-egg footer, now INSIDE the page box. It's a full-width block
-   pinned to the bottom, two rows of a 1px near-invisible font, clipped. It's
-   preserved across renders (pager keeps [data-keep]) and never tokenized, so it
-   can't reach speed-read/word-count/progress. Absolutely positioned within the
-   page's padding band so it doesn't steal a line from the text or change the
-   page-turn height math. */
-.page { position: relative; } /* containing block for the egg */
-.page-egg {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  width: 100%; height: 2.4px; overflow: hidden;
-  font-size: 1px; line-height: 1.2; letter-spacing: 0;
-  color: var(--bg); opacity: 0.02;
-  pointer-events: none; -webkit-user-select: none; user-select: none;
-  white-space: normal; word-break: break-word;
-  margin: 0; padding: 0 2px; box-sizing: border-box;
-}
 /* Text size presets (Settings → Text size). "Small" is the default fluid size;
    Medium and Large scale up. Applied on <body> so the chosen size cascades into
    the page font variable; re-pagination on change recomputes pages at that size. */
