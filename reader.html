@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=1782960000">
+<link rel="stylesheet" href="css/style.css?v=1782940000">
 </head>
 <body class="reader-page">
 <header class="top reader-top">
@@ -52,12 +52,7 @@
   <section id="pagedView" aria-label="Paged reader">
     <div class="page-frame">
       <button class="page-edge left" id="pagePrev" aria-label="Previous page"><span class="chev">‹</span></button>
-      <div class="page" id="page"><!-- Hidden Easter-egg footer, kept INSIDE the
-        page so it pins the box to full width. It is preserved across page renders
-        (the pager clears only token nodes), sits at the bottom on its own full-
-        width row, is near-invisible, non-interactive, and is NEVER tokenized, so
-        it can't appear in speed-read, word counts, or progress. -->
-        <div class="page-egg" id="pageEgg" aria-hidden="true" data-keep="1">The Five Agreements by Don Miguel Ruiz: Be impeccable with your word. Don't take anything personally. Don't make assumptions. Always do your best. Be skeptical, but learn to listen.</div></div>
+      <div class="page" id="page"></div>
       <button class="page-edge right" id="pageNext" aria-label="Next page"><span class="chev">›</span></button>
     </div>
     <div class="page-meta">
@@ -114,13 +109,13 @@
   </div>
 </main>
 
-<script src="js/parser.js?v=1782960000"></script>
-<script src="js/storage.js?v=1782960000"></script>
-<script src="js/rsvp.js?v=1782960000"></script>
-<script src="js/coords.js?v=1782960000"></script>
-<script src="js/paged.js?v=1782960000"></script>
-<script src="js/tokencache.js?v=1782960000"></script>
-<script src="js/reader.js?v=1782960000"></script>
+<script src="js/parser.js?v=1782940000"></script>
+<script src="js/storage.js?v=1782940000"></script>
+<script src="js/rsvp.js?v=1782940000"></script>
+<script src="js/coords.js?v=1782940000"></script>
+<script src="js/paged.js?v=1782940000"></script>
+<script src="js/tokencache.js?v=1782940000"></script>
+<script src="js/reader.js?v=1782940000"></script>
 
 <!-- Screen Wake Lock: keeps the phone awake during speed-reading -->
 <script>
