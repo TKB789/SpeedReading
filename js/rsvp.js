@@ -22,9 +22,13 @@
     var p;
     if (n <= 2) p = 0;
     else if (n === 3) p = 1;
-    // Words 4+ letters: place the pivot one letter left of centre for a better
-    // visual balance (the long tail otherwise pushes the word off to one side).
-    else p = Math.floor(n / 2) - 1;
+    // Words 4-7 letters: pivot one letter left of centre for better visual
+    // balance (the long tail otherwise pushes the word off to one side).
+    else if (n <= 7) p = Math.floor(n / 2) - 1;
+    // Words 8-11 letters: pivot two letters left of centre.
+    else if (n <= 11) p = Math.floor(n / 2) - 2;
+    // Words 12+ letters: pivot three letters left of centre.
+    else p = Math.floor(n / 2) - 3;
 
     // Safety: never leave more than 9 letters trailing the pivot, so the right
     // side can't run off the rail.
