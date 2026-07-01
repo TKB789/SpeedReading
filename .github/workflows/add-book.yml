@@ -1,23 +1,33 @@
 # .github/workflows/add-book.yml
 #
-# Adds a public-domain book to the library by Project Gutenberg ID, with no
-# terminal needed. Run it from the repo's Actions tab → "Add book" →
-# "Run workflow", fill in the ID, and it fetches the text, builds the JSON,
-# updates the manifest, and commits the result. GitHub Pages redeploys on push.
+# One workflow, two ways to add a book to the library:
+#
+#   A) Gutenberg (manual): Actions tab → "Add book" → "Run workflow", enter a
+#      search query or Project Gutenberg ID(s). Fetches the text, builds the
+#      JSON via build-book.js, and commits it. (Your original process.)
+#
+#   B) Uploaded .txt (automatic): commit a plain-text file into books-src/ and
+#      push. This workflow parses it via scripts/build-books.js into
+#      books/<id>.json, then deletes the .txt so the source isn't stored twice.
+#      See books-src/README.md and books-src/FORMATTING.md.
+#
+# Both paths finish by running scripts/build-books.js, which rebuilds
+# books/manifest.json from every book JSON present AND merges the existing
+# manifest — so Gutenberg books (which carry `source`/`cover` only on the
+# manifest entry) and uploaded books coexist without either dropping the other.
 #
 # IMPORTANT: only add books that are public domain. Everything on Project
 # Gutenberg marked public-domain is fine in the U.S.; check local law elsewhere.
 #
 # Action versions (checked June 2026): checkout@v5 and setup-node@v5 run on the
-# Node 24 runtime. The older @v4 line runs on Node 20, which GitHub deprecated —
-# forced off by June 2026 and removed September 2026 — so v5 avoids the warnings.
-# node-version 22 below is the LTS the build script itself runs on; bump it when
-# a newer LTS lands. If a workflow ever fails on a "Node 20 deprecated" notice,
-# the fix is to raise these @v5 pins to the current major.
+# Node 24 runtime. node-version 22 is the LTS the build scripts run on; bump it
+# when a newer LTS lands. If a run ever warns "Node 20 deprecated", raise these
+# @v5 pins to the current major.
 
 name: Add book
 
 on:
+  # A) Manual Gutenberg add.
   workflow_dispatch:
     inputs:
       query:
@@ -40,9 +50,21 @@ on:
         description: "Author (optional — read from the file if blank)"
         required: false
         type: string
+  # B) Automatic build when a .txt (or the parser / scripts) changes.
+  push:
+    paths:
+      - 'books-src/**'
+      - 'js/parser.js'
+      - 'scripts/build-books.js'
+      - '.github/workflows/add-book.yml'
 
 permissions:
   contents: write   # needed so the workflow can commit the new book back
+
+# Don't let a manual add and a push-triggered build stomp each other's commit.
+concurrency:
+  group: add-book-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   add-book:
@@ -56,7 +78,9 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build the book
+      # --- Path A: Gutenberg (only when the workflow was run manually) ---
+      - name: Build the book (Gutenberg)
+        if: github.event_name == 'workflow_dispatch'
         run: |
           QUERY="${{ github.event.inputs.query }}"
           ID="${{ github.event.inputs.gutenberg_id }}"
@@ -83,14 +107,70 @@ jobs:
             exit 1
           fi
 
-      - name: Commit and push the new book
+      # --- Path B: parse uploaded .txt files in books-src/ (always runs) ---
+      # Safe to run even on the Gutenberg path: with no new .txt it simply
+      # rebuilds the manifest from existing book JSONs, which is exactly the
+      # finalization step we want after build-book.js too.
+      - name: Build uploaded books + rebuild manifest
+        run: node scripts/build-books.js
+
+      - name: Remove source .txt only for books that actually built
+        run: |
+          # Delete a .txt ONLY if its generated books/<id>.json now exists, so a
+          # parse that produced nothing never silently loses your source text.
+          # The id is the filename slug — mirror build-books.js's slugify.
+          slugify() {
+            printf '%s' "$1" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/\.[^.]+$//; s/[^a-z0-9]+/-/g; s/^-+|-+$//g; s/-{2,}/-/g'
+          }
+          shopt -s nullglob
+          for txt in books-src/*.txt; do
+            base="$(basename "$txt")"
+            id="$(slugify "$base")"
+            if [ -f "books/$id.json" ]; then
+              rm -f "$txt"
+              rm -f "books-src/${base%.txt}.json"   # drop its sidecar too, if any
+              echo "built + removed source: $txt -> books/$id.json"
+            else
+              echo "::warning::No books/$id.json produced for $txt — keeping the .txt so it isn't lost."
+            fi
+          done
+
+      - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add books/
+          # Force-add books/ in case it's ever gitignored, so the generated JSON
+          # + manifest are always committed (otherwise a book can silently fail
+          # to appear even though its source .txt was removed).
+          git add -f books/
+          git add books-src/
           if git diff --cached --quiet; then
-            echo "No changes — the book may already exist or the fetch returned nothing."
+            echo "No changes — the book may already exist, or the fetch/parse returned nothing."
             exit 0
           fi
-          git commit -m "Add book to library (query='${{ github.event.inputs.query }}' id='${{ github.event.inputs.gutenberg_id }}')"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MSG="Add book to library (query='${{ github.event.inputs.query }}' id='${{ github.event.inputs.gutenberg_id }}')"
+          else
+            MSG="chore: build uploaded books, drop built source .txt [skip ci]"
+          fi
+          git commit -m "$MSG"
           git push
+
+      - name: Sanity-check manifest
+        run: |
+          # Fail visibly if book JSONs exist but the manifest is empty — that's
+          # the "source vanished, library empty" situation and shouldn't pass.
+          node -e '
+            const fs=require("fs"),p=require("path");
+            const dir="books", mf=p.join(dir,"manifest.json");
+            if(!fs.existsSync(dir)){console.log("no books/ dir yet — nothing to check");process.exit(0);}
+            const jsons=fs.readdirSync(dir).filter(f=>/\.json$/.test(f)&&f!=="manifest.json");
+            let man=[]; try{man=JSON.parse(fs.readFileSync(mf,"utf8"));}catch(e){}
+            console.log("book JSONs:",jsons.length,"| manifest entries:",man.length);
+            if(jsons.length>0 && man.length===0){
+              console.error("::error::books/ has JSON files but manifest.json is empty — the library will show nothing.");
+              process.exit(1);
+            }
+          '
