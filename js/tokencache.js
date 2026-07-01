@@ -22,7 +22,8 @@
 
   var DB_NAME = 'rsvp-reader';
   var STORE = 'tokens';
-  var VERSION = 1;
+  var RAW_STORE = 'rawbooks';            // raw book JSON, so reopen skips the network
+  var VERSION = 2;
   var SOFT_BUDGET = 120 * 1024 * 1024;   // ~120 MB soft cap before LRU eviction
   var dbPromise = null;
 
@@ -42,6 +43,9 @@
           var os = db.createObjectStore(STORE, { keyPath: 'id' });
           os.createIndex('lastOpened', 'lastOpened', { unique: false });
         }
+        if (!db.objectStoreNames.contains(RAW_STORE)) {
+          db.createObjectStore(RAW_STORE, { keyPath: 'id' });
+        }
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error || new Error('idb-open-failed')); };
@@ -52,6 +56,11 @@
   function tx(mode) {
     return openDB().then(function (db) {
       return db.transaction(STORE, mode).objectStore(STORE);
+    });
+  }
+  function txStore(store, mode) {
+    return openDB().then(function (db) {
+      return db.transaction(store, mode).objectStore(store);
     });
   }
   function reqToPromise(r) {
@@ -176,9 +185,28 @@
     });
   }
 
+  // ---- raw book JSON cache --------------------------------------------------
+  // Store the parsed book object so reopening skips the network fetch entirely.
+  // Separate from the token cache: this is the small source JSON; tokens are the
+  // large derived form. A raw hit lets us tokenize the first chapter and paint
+  // without waiting on the network even before the token cache is populated.
+  function getRaw(bookId) {
+    return txStore(RAW_STORE, 'readonly')
+      .then(function (os) { return reqToPromise(os.get(bookId)); })
+      .then(function (rec) { return rec && rec.book ? rec.book : null; })
+      .catch(function () { return null; });
+  }
+  function putRaw(bookId, book) {
+    return txStore(RAW_STORE, 'readwrite')
+      .then(function (os) { return reqToPromise(os.put({ id: bookId, book: book })); })
+      .then(function () { return true; })
+      .catch(function () { return false; });   // best-effort; failure just means we refetch
+  }
+
   root.TokenCache = {
     available: available,
     get: get, put: put, touch: touch, remove: remove, list: list,
+    getRaw: getRaw, putRaw: putRaw,
     _encode: encode, _decode: decode   // exposed for tests
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.TokenCache;

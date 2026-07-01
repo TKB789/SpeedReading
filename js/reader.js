@@ -162,15 +162,16 @@
   }
 
   function loadBook() {
-    // Only show the loading screen if the book isn't ready almost immediately.
-    // Cache-path and small-book opens finish in a few ms and shouldn't flash a
-    // loading screen at all; a short grace window avoids that flicker while still
-    // showing the escape UI for genuinely slow loads.
+    // Only show the loading screen if the book isn't ready reasonably quickly.
+    // Cache-path and small-book opens finish well under this window and shouldn't
+    // flash a loading screen at all; the grace window is generous enough that a
+    // warm reopen (raw-JSON cache + token cache) never trips it, while a genuinely
+    // slow cold fetch still surfaces the escape UI.
     escapeTimer = setTimeout(function () {
       if (loadFinished) return;
       showLoadingEscape();
       setLoadingMsg('Loading this book…');
-    }, 250);
+    }, 600);
 
     // Escalate the message if it's slow, and hard-fail if it truly hangs.
     slowTimer = setTimeout(function () {
@@ -190,13 +191,34 @@
 
     loadController = ('AbortController' in window) ? new AbortController() : null;
     var fetchOpts = loadController ? { signal: loadController.signal } : {};
-    fetch('books/' + encodeURIComponent(bookId) + '.json', fetchOpts)
-      .then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
-      .then(function (b) { setTimeout(function () { setup(b); }, 0); })
-      .catch(function (err) {
-        if (err && err.name === 'AbortError') return; // user left on purpose
-        fail('Could not load that book.');
-      });
+
+    // Try the raw-JSON cache first so a reopen skips the network entirely and
+    // goes straight to (cached) tokenization / first paint. On a miss, fetch and
+    // populate the cache for next time.
+    function fetchFromNetwork() {
+      fetch('books/' + encodeURIComponent(bookId) + '.json', fetchOpts)
+        .then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
+        .then(function (b) {
+          if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
+            try { TokenCache.putRaw(bookId, b); } catch (e) {}
+          }
+          setTimeout(function () { setup(b); }, 0);
+        })
+        .catch(function (err) {
+          if (err && err.name === 'AbortError') return; // user left on purpose
+          fail('Could not load that book.');
+        });
+    }
+
+    if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
+      TokenCache.getRaw(bookId).then(function (cachedBook) {
+        if (loadFinished) return;                 // aborted meanwhile
+        if (cachedBook && cachedBook.chapters) { setTimeout(function () { setup(cachedBook); }, 0); }
+        else { fetchFromNetwork(); }
+      }).catch(fetchFromNetwork);
+    } else {
+      fetchFromNetwork();
+    }
   }
   function fail(msg) {
     loadDone();
@@ -272,7 +294,7 @@
     var startPause = 2;
     els.wpm.value = startWpm; els.wpmVal.textContent = startWpm + ' wpm';
 
-    var FIRST_CHUNK = 2;          // chapters before first paint (cold open)
+    var FIRST_CHUNK = 1;          // chapters before first paint (cold open) — paint ASAP, stream the rest
     var REST_CHUNK = 8;           // chapters per background slice
 
     tokens = [];
@@ -313,6 +335,9 @@
 
     // Load a fully-tokenized book from cache in one shot, then go live.
     function loadFromCache(cached) {
+      // A cache hit means we're about to go live almost immediately — cancel the
+      // pending loading-screen timer so it can't flash mid-rehydration.
+      clearTimeout(escapeTimer);
       loadedFromCache = true;
       for (var i = 0; i < cached.length; i++) tokens.push(cached[i]);
       indexChapters();
