@@ -514,6 +514,16 @@
         var meta = document.getElementById('pageNum');
         if (meta) meta.textContent = pagedStatusText(info);
         setTopChapter(info.chapter);
+        // Keep the engine's position in sync with the page the reader is on, so
+        // reopening resumes to THIS page. Page turns don't move the RSVP engine
+        // on their own, so without this the only saved position was the rail's,
+        // and the paged view never remembered where you'd read to. We only sync
+        // while the paged view is the active one (not while the rail is driving
+        // the page strip in RSVP mode) to avoid fighting the engine.
+        if (currentView === 'read' && engine && info && info.startIndex != null) {
+          engine.index = info.startIndex;
+          onState(engine.snapshot());   // debounced-saves the new coordinate
+        }
       }
     });
     paged.enableTaps();
