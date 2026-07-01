@@ -34,6 +34,21 @@
       .trim();
   }
 
+  // Reduce a heading to its "keyword + numeral" prefix for TOC↔body matching,
+  // or null if there's no numeral. TOC entries often carry a descriptive summary
+  // ("Chapter I - Civilizing Huck…—Miss Watson…") while the body heading is bare
+  // ("CHAPTER I."). Matching on the prefix lets those two forms agree.
+  function headingKey(s) {
+    var norm = normHeading(s);
+    var m = KEYWORD.exec(norm);
+    if (!m) return null;
+    var rest = norm.slice(m[0].length).replace(/^[\s.\)\]:\u2014-]+/, '');
+    var num = /^(\d+|[ivxlcdm]+|the last)\b/i.exec(rest);
+    if (num) return (m[1].toLowerCase() + ' ' + num[0].toLowerCase()).trim();
+    // Bare unnumbered keyword section (e.g. "preface"): key on the keyword alone.
+    return m[1].toLowerCase();
+  }
+
   // The no-TOC fallback test: does this line look like a standalone heading?
   // Without a TOC to confirm titles, we require a NUMERAL after the keyword
   // (e.g. "Chapter 5", "LETTER IV", "CHAPTER THE LAST"). A keyword followed by
@@ -177,8 +192,9 @@
   }
 
   // Locate the table of contents, if present. Returns { entries:Set, endLine:int }
-  // where `entries` are normalized TOC headings and `endLine` is the last line of
-  // the TOC block (so the caller can skip the whole block). null if no real TOC.
+  // where `entries` are keyword+numeral keys of TOC headings and `endLine` is the
+  // last line of the TOC block (so the caller can skip the whole block). null if
+  // no real TOC.
   //
   // A TOC is a CONTENTS marker followed by a dense run of heading lines. The body
   // begins at the first heading that is followed by substantial prose (≥10 lines);
@@ -193,7 +209,7 @@
     var heads = [];
     for (var j = c + 1; j < lines.length; j++) {
       var t = lines[j].trim();
-      if (t && t.length <= 70 && KEYWORD.test(t)) heads.push(j);
+      if (t && t.length <= 200 && KEYWORD.test(t) && headingKey(t)) heads.push(j);
     }
     if (heads.length < 3) return null;
 
@@ -205,7 +221,7 @@
       var prose = 0;
       for (var p = ln + 1; p < nx; p++) if (lines[p].trim()) prose++;
       if (prose >= 10) { tocEnd = (k > 0) ? heads[k - 1] : c; break; } // body began
-      entries.add(normHeading(lines[ln].trim()));
+      entries.add(headingKey(lines[ln].trim()));
     }
     if (entries.size < 3) return null;
     if (tocEnd === -1) tocEnd = heads[heads.length - 1]; // TOC ran to the last head
@@ -220,7 +236,11 @@
     function isHeading(line) {
       var t = line.trim();
       if (!t) return false;
-      if (toc) return KEYWORD.test(t) && t.length <= 70 && toc.entries.has(normHeading(t));
+      if (toc) {
+        if (!KEYWORD.test(t) || t.length > 200) return false;
+        var key = headingKey(t);
+        return !!key && toc.entries.has(key);
+      }
       return looksLikeHeadingLine(t);
     }
 
