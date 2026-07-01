@@ -590,8 +590,8 @@
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
       catch (e) { /* quota/private-mode: history is best-effort, ignore */ }
     }
-    function recordPage(wpm) {
-      history.push({ t: Date.now(), wpm: wpm });
+    function recordPage(page, wpm) {
+      history.push({ t: Date.now(), page: (page != null ? page : null), wpm: wpm });
       if (history.length > HISTORY_CAP) history.splice(0, history.length - HISTORY_CAP);
       saveHistory();
       renderHistory();
@@ -617,32 +617,42 @@
       if (dt > 0 && dt < 30000) pageActiveMs += dt;   // ignore gaps >30s (backgrounded)
     }
 
-    // Begin timing a paged page that has `words` words on it.
-    function startPage(words) {
+    // Begin timing a paged page that has `words` words on it. `page` is a display
+    // label (the global page number when known) recorded with this page's result.
+    var pageLabel = null;
+    function startPage(words, page) {
       commit();                    // bank whatever was open before
       pageWords = words || 0;
+      pageLabel = (page != null) ? page : null;
       pageActiveMs = 0;
       lastTick = now();
       timing = pageWords > 0;
     }
-    // Compute the just-finished page's pace and make it THE reported number.
+    // Compute the just-finished page's pace and make it THE reported number. Pages
+    // whose pace can't be trusted (flashed past, or left too long / walked away)
+    // are still LOGGED — with a null wpm that renders as "--" — so the history is a
+    // complete page-by-page record rather than silently skipping pages.
     function commit() {
       accrue();
       if (!timing) { return; }
       var dt = pageActiveMs;
+      var pg = pageLabel;
       timing = false;
       if (pageWords <= 0) return;
-      if (dt < MIN_MS) return;                 // flashed past (misclick) — keep prior number
+      if (dt < MIN_MS) {                       // flashed past (misclick) — uncomputable
+        recordPage(pg, null);
+        return;                                // keep the on-screen number as-is
+      }
       if (dt > maxMsFor(pageWords)) {
-        // Beyond the slowest-reader threshold → treat as walked-away. Don't count
-        // it, and blank the readout to "--" so a stale pace isn't shown; the next
-        // real page turn recomputes and the number returns.
+        // Beyond the slowest-reader threshold → treat as walked-away. Uncomputable,
+        // so log "--" and blank the live readout; the next real page recomputes it.
+        recordPage(pg, null);
         blanked = true; render();
         return;
       }
       lastWpm = Math.round(pageWords / (dt / 60000));
       blanked = false;
-      recordPage(lastWpm);   // persist this page's pace for the Settings history
+      recordPage(pg, lastWpm);   // persist this page's pace for the Settings history
       render();
     }
     // Speed-read no longer feeds the meter per-tick; pace is page-turn-only.
@@ -653,6 +663,7 @@
       timing = false;
       pageWords = 0;
       pageActiveMs = 0;
+      pageLabel = null;
     }
     function value() {
       return lastWpm;
@@ -664,7 +675,9 @@
       el.textContent = (blanked || v == null) ? '-- wpm' : (v.toLocaleString() + ' wpm');
     }
     // Render the scrolling history list into the Settings panel (if present).
-    // Newest first. Kept lightweight: plain rows of "wpm · relative time".
+    // Newest first. Each row: "page N · WPM" on the left, relative time on the
+    // right. Pages whose pace couldn't be computed show "--" for the wpm. Entries
+    // saved before page numbers existed (no h.page) omit the page label.
     function renderHistory() {
       var list = document.getElementById('wpmHistoryList');
       if (!list) return;
@@ -675,9 +688,11 @@
       var rows = [];
       for (var i = history.length - 1; i >= 0; i--) {
         var h = history[i];
+        var pageStr = (h.page != null) ? ('p. ' + h.page.toLocaleString() + ' \u00B7 ') : '';
+        var wpmStr = (h.wpm != null) ? (h.wpm.toLocaleString() + ' wpm') : '\u2014';
         rows.push('<div class="wpm-hist-row" style="display:flex;justify-content:space-between;' +
           'padding:6px 10px;border-top:1px solid var(--rule,rgba(128,128,128,.18))">' +
-          '<span style="font-variant-numeric:tabular-nums">' + h.wpm.toLocaleString() + ' wpm</span>' +
+          '<span style="font-variant-numeric:tabular-nums">' + pageStr + wpmStr + '</span>' +
           '<span style="color:var(--fg-dim)">' + relTime(h.t) + '</span></div>');
       }
       list.innerHTML = rows.join('');
@@ -738,7 +753,12 @@
           ? (info.chapter + ':' + info.pageInChapter) : null;
         if (pageKey != null && info.wordsOnPage != null && pageKey !== _wpmLastPageKey) {
           _wpmLastPageKey = pageKey;
-          Wpm.startPage(info.wordsOnPage);
+          // Label the history entry with the global page number when totals are
+          // ready (e.g. "3 of 589" → 3); before then, fall back to the page number
+          // within the chapter so the entry still has a meaningful page.
+          var pageLabelNum = (info.absolutePage && info.absolutePage > 0)
+            ? info.absolutePage : info.pageInChapter;
+          Wpm.startPage(info.wordsOnPage, pageLabelNum);
         }
         // Keep the engine's position in sync with the page the reader is on, so
         // reopening resumes to THIS page. Page turns don't move the RSVP engine
