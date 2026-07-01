@@ -2,7 +2,7 @@
 /*
  * build-book.js — add a public-domain book to the repo library.
  *
- * Three modes:
+ * Modes:
  *   Search the Gutenberg catalogue by title/author (Gutendex API):
  *     node build-book.js --search "frankenstein shelley"
  *     node build-book.js --search "frankenstein shelley" --build   (build top hit)
@@ -10,11 +10,18 @@
  *     node build-book.js --gutenberg <numericId> [id] ["Title"] ["Author"]
  *   From a local file:
  *     node build-book.js <input.txt> <id> "<Title>" "<Author>"
+ *   Remove a book (deletes books/<id>.json and its manifest entry):
+ *     node build-book.js --remove <id>[,<id>...]
+ *   Sync the manifest to whatever .json files actually exist on disk
+ *   (use this after deleting book JSONs by hand):
+ *     node build-book.js --sync
  *
  * Examples:
  *   node build-book.js --search "pride and prejudice"
  *   node build-book.js --gutenberg 1342 pride "Pride and Prejudice" "Jane Austen"
  *   node build-book.js mybook.txt mybook "My Book" "Some Author"
+ *   node build-book.js --remove pg1342
+ *   node build-book.js --sync
  *
  * It strips PG boilerplate, splits chapters, writes books/<id>.json, and updates
  * books/manifest.json. It does NOT verify copyright — only run it on texts you
@@ -154,6 +161,88 @@ function writeBook(book, coverFile) {
     ' chapters, ' + book.wordCount.toLocaleString() + ' words → books/' + book.id + '.json');
 }
 
+// Delete books/<id>.json (if present) and drop its manifest entry.
+function removeBook(id) {
+  var booksDir = path.join(__dirname, 'books');
+  var jsonPath = path.join(booksDir, id + '.json');
+  var hadFile = fs.existsSync(jsonPath);
+  if (hadFile) fs.unlinkSync(jsonPath);
+
+  var manifestPath = path.join(booksDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    console.log((hadFile ? 'Deleted books/' + id + '.json. ' : '') + 'No manifest to update.');
+    return;
+  }
+  var manifest = [];
+  try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch (e) {}
+  var before = manifest.length;
+  manifest = manifest.filter(function (b) { return b.id !== id; });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+  var removedEntry = before !== manifest.length;
+  if (!hadFile && !removedEntry) {
+    console.log('Nothing to remove for "' + id + '" (no JSON, no manifest entry).');
+  } else {
+    console.log((hadFile ? 'Deleted books/' + id + '.json; ' : '') +
+      (removedEntry ? 'removed from manifest.' : 'no manifest entry.'));
+  }
+}
+
+// Rebuild the manifest to match whatever <id>.json files actually exist on disk.
+// Prunes entries whose JSON was deleted by hand, and adds any JSON that has no
+// manifest entry yet (reading title/author/etc. straight from the file).
+function syncManifest() {
+  var booksDir = path.join(__dirname, 'books');
+  if (!fs.existsSync(booksDir)) { console.log('No books/ directory — nothing to sync.'); return; }
+
+  var manifestPath = path.join(booksDir, 'manifest.json');
+  var manifest = [];
+  if (fs.existsSync(manifestPath)) {
+    try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch (e) {}
+  }
+  var byId = {};
+  manifest.forEach(function (b) { byId[b.id] = b; });
+
+  var files = fs.readdirSync(booksDir).filter(function (f) {
+    return /\.json$/.test(f) && f !== 'manifest.json';
+  });
+  var liveIds = files.map(function (f) { return f.replace(/\.json$/, ''); });
+  var liveSet = {};
+  liveIds.forEach(function (id) { liveSet[id] = true; });
+
+  var pruned = manifest.filter(function (b) { return !liveSet[b.id]; })
+    .map(function (b) { return b.id; });
+
+  var next = [];
+  var added = [];
+  liveIds.forEach(function (id) {
+    if (byId[id]) { next.push(byId[id]); return; }
+    // JSON exists but isn't in the manifest — build an entry from the file.
+    try {
+      var book = JSON.parse(fs.readFileSync(path.join(booksDir, id + '.json'), 'utf8'));
+      next.push({
+        id: id,
+        title: book.title || id,
+        author: book.author || 'Unknown',
+        wordCount: book.wordCount || 0,
+        cover: book.cover || null,
+        source: book.source || null
+      });
+      added.push(id);
+    } catch (e) {
+      console.error('  Skipped ' + id + '.json (unreadable): ' + e.message);
+    }
+  });
+
+  next.sort(function (a, b) { return String(a.title).localeCompare(String(b.title)); });
+  fs.writeFileSync(manifestPath, JSON.stringify(next, null, 2));
+
+  console.log('Synced manifest: ' + next.length + ' entries.' +
+    (pruned.length ? '\n  Pruned (' + pruned.length + '): ' + pruned.join(', ') : '') +
+    (added.length ? '\n  Added (' + added.length + '): ' + added.join(', ') : '') +
+    (!pruned.length && !added.length ? ' Already in sync.' : ''));
+}
+
 async function main() {
   var argv = process.argv.slice(2);
   if (argv[0] === '--search') {
@@ -185,6 +274,14 @@ async function main() {
       console.log('\nTo add one, run:  node build-book.js --gutenberg <ID>');
       console.log('Or re-run this search with --build to build the top match.');
     }
+  } else if (argv[0] === '--remove') {
+    // node build-book.js --remove <id>[,<id>...]
+    var rmIds = argv.slice(1).join(' ').split(/[\s,]+/).filter(Boolean);
+    if (!rmIds.length) { console.error('Usage: node build-book.js --remove <id>[,<id>...]'); process.exit(1); }
+    rmIds.forEach(removeBook);
+  } else if (argv[0] === '--sync') {
+    // node build-book.js --sync   (reconcile manifest with files on disk)
+    syncManifest();
   } else if (argv[0] === '--gutenberg') {
     var gidArg = argv[1];
     if (!gidArg) { console.error('Usage: node build-book.js --gutenberg <id>[,<id>...] [slug] ["Title"] ["Author"]'); process.exit(1); }
@@ -234,7 +331,7 @@ async function main() {
   } else {
     var input = argv[0], id2 = argv[1], title = argv[2], author = argv[3];
     if (!input || !id2) {
-      console.error('Usage:\n  node build-book.js <input.txt> <id> "<Title>" "<Author>"\n  node build-book.js --gutenberg <id> [id] ["Title"] ["Author"]');
+      console.error('Usage:\n  node build-book.js <input.txt> <id> "<Title>" "<Author>"\n  node build-book.js --gutenberg <id> [id] ["Title"] ["Author"]\n  node build-book.js --remove <id>[,<id>...]\n  node build-book.js --sync');
       process.exit(1);
     }
     var raw2 = fs.readFileSync(input, 'utf8');
