@@ -147,6 +147,12 @@
     "source": "Project Gutenberg #47530 — public domain"
   },
   {
+    "id": "pride-and-prejudice",
+    "title": "PRIDE and PREJUDICE",
+    "author": "Jane Austen,",
+    "wordCount": 125869
+  },
+  {
     "id": "pg1513",
     "title": "Romeo and Juliet",
     "author": "Shakespeare, William",
@@ -285,12 +291,6 @@
     "author": "Stevenson, Robert Louis",
     "wordCount": 68270,
     "source": "Project Gutenberg #120 — public domain"
-  },
-  {
-    "id": "pride-and-prejudice",
-    "title": "Untitled",
-    "author": "Unknown",
-    "wordCount": 125875
   },
   {
     "id": "pg2600",
