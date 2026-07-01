@@ -519,6 +519,7 @@
       pagesInChapter: pagesInCh,
       pagesLeftInChapter: Math.max(0, pagesInCh - (this._pageIdx + 1)),
       startIndex: this.firstIndex || 0,
+      wordsOnPage: Math.max(0, (this.lastIndex || 0) - (this.firstIndex || 0) + 1),
       chapter: t ? t.chapter : 0,
       atStart: (this.startPos || 0) <= 0,
       atEnd: this.endPos >= this.tokens.length,
