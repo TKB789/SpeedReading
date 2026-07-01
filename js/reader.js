@@ -511,6 +511,7 @@
 
   var paged = null, currentView = 'read';
   var curPageInChapter = null;   // latest page-within-chapter for durable resume
+  var _wpmLastPageStart = null;  // first-word index of the last page banked by the meter
 
   // ---- Session reading-pace meter -------------------------------------------
   // Cheap, non-competitive: shows words-per-minute for THIS browser session only
@@ -578,10 +579,7 @@
       blanked = false;
       render();
     }
-    // Speed-read contributes directly: `words` read over `ms` milliseconds.
-    function addSpeedRead(words, ms) {
-      if (words > 0 && ms > 0) { totalWords += words; totalMs += ms; blanked = false; render(); }
-    }
+    // Speed-read no longer feeds the meter per-tick; pace is page-turn-only.
     function value() {
       if (totalMs <= 0) return null;
       return Math.round(totalWords / (totalMs / 60000));
@@ -601,7 +599,7 @@
     setInterval(accrue, 5000);
     window.addEventListener('beforeunload', commit);
 
-    return { startPage: startPage, commit: commit, addSpeedRead: addSpeedRead, render: render };
+    return { startPage: startPage, commit: commit, render: render };
   })();
 
   // Tap interaction state: 'idle' (normal) or 'armed' (box outlined, prompt up).
@@ -616,13 +614,23 @@
         var meta = document.getElementById('pageNum');
         if (meta) meta.textContent = pagedStatusText(info);
         setTopChapter(info.chapter);
-        // Remember the exact page within the chapter for durable resume.
-        if (info && info.pageInChapter != null) curPageInChapter = info.pageInChapter;
-        // Session pace: when a new page is shown in the read view, bank the time
-        // spent on the previous page and start timing this one. Only in read view
-        // (the paged strip in speed-read mode is driven by the rail, which reports
-        // its own words to the meter separately).
-        if (currentView === 'read' && info && info.wordsOnPage != null) {
+        // Remember the exact page within the chapter for durable resume — but
+        // ONLY in the read view. In speed-read the strip advances a page at a time
+        // via follow(), so its page number lags the actual word by up to a full
+        // page; letting it write curPageInChapter would persist a page-boundary
+        // anchor and make reopen jump to the top of the page (hundreds of words
+        // off). In speed-read the content coordinate is the sole resume anchor.
+        if (currentView === 'read' && info && info.pageInChapter != null) {
+          curPageInChapter = info.pageInChapter;
+        }
+        // Session pace: bank the previous page's time and start timing the newly
+        // shown page — for BOTH views, so speed-reading is measured by how long
+        // each page of text is on screen, exactly like page reading. Guarded on
+        // the page's first word actually changing, so background re-flows (stream
+        // inserts calling follow()/shiftPositions) don't fire a spurious turn.
+        if (info && info.wordsOnPage != null && info.startIndex != null &&
+            info.startIndex !== _wpmLastPageStart) {
+          _wpmLastPageStart = info.startIndex;
           Wpm.startPage(info.wordsOnPage);
         }
         // Keep the engine's position in sync with the page the reader is on, so
@@ -652,7 +660,11 @@
     // token's page if we have no saved page or the exact restore can't apply.
     paged.buildWhenReady(tokens, function () {
       var restored = false;
-      if (!didInitialPaint && resumePageInChapter != null) {
+      // Exact page-within-chapter restore is a READ-mode concern. In speed-read,
+      // the durable anchor is the content coordinate (already resolved into
+      // engine.index), which points at the exact word — restoring a page here
+      // would snap to the page's first word and jump the resume ahead/behind.
+      if (!didInitialPaint && resumeMode !== 'rsvp' && resumePageInChapter != null) {
         var hint = (engine ? engine.index : 0);
         restored = paged.goToChapterPage(resumeChapterNum, resumePageInChapter, hint);
       }
@@ -761,9 +773,10 @@
   // rail starts where the reader's eyes were rather than at the resume point.
   function switchView(view, snapToPage) {
     var cameFromRsvp = (currentView === 'rsvp');
-    // Leaving the read view: bank the currently-open page's reading time so it
-    // isn't lost or wrongly extended across the mode switch.
-    if (currentView === 'read' && view !== 'read') Wpm.commit();
+    // Switching views ends the current page's timing span. Bank it and clear the
+    // page-turn guard so the destination view's first page starts timing fresh.
+    Wpm.commit();
+    _wpmLastPageStart = null;
     currentView = view;
     var readView = document.getElementById('pagedView');
     var rsvpView = document.getElementById('rsvpView');
@@ -1109,25 +1122,12 @@
     }
   }
 
-  var _rsvpLastIdx = null, _rsvpLastT = 0;
   function onState(snap) {
     els.play.textContent = snap.playing ? 'Pause' : (snap.index >= snap.total - 1 ? 'Replay' : 'Play');
     updateProgressLabel(snap);
-    // Session pace from speed-reading: while playing, add the words advanced and
-    // the real time elapsed since the last tick to the meter. This reflects the
-    // actual pace (including the gaps between words), and naturally blends with
-    // paged reading in the same words/time pool. Non-forward jumps (seek, replay)
-    // reset the span so a skip doesn't count as instant reading.
-    if (snap.playing && currentView === 'rsvp') {
-      var t = Date.now();
-      if (_rsvpLastIdx != null && snap.index > _rsvpLastIdx && _rsvpLastT) {
-        var dw = snap.index - _rsvpLastIdx, dt = t - _rsvpLastT;
-        if (dt > 0 && dt < 10000) Wpm.addSpeedRead(dw, dt);   // ignore long stalls
-      }
-      _rsvpLastIdx = snap.index; _rsvpLastT = t;
-    } else {
-      _rsvpLastIdx = null; _rsvpLastT = 0;
-    }
+    // Session pace is measured on PAGE TURNS only (see Wpm + onPageChange), so
+    // nothing is fed from per-tick engine state here. This keeps the meter from
+    // being skewed by re-renders that fire when tokenization/pagination finishes.
     // Debounced progress save — stored as a CONTENT COORDINATE so it resolves on
     // reopen without needing the whole book tokenized first.
     clearTimeout(saveTimer);
