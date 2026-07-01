@@ -108,7 +108,7 @@
   // plus timers that escalate the message ("taking longer…") and eventually
   // give up. loadDone() clears all of this once the book is ready or has failed.
   var loadController = null;
-  var slowTimer = null, giveUpTimer = null, loadFinished = false;
+  var slowTimer = null, giveUpTimer = null, escapeTimer = null, loadFinished = false;
   var LIBRARY_URL = 'index.html?home';
 
   // Inject a persistent "Back to library" escape hatch into the loading screen
@@ -149,21 +149,28 @@
 
   function abortLoad() {
     if (loadController) { try { loadController.abort(); } catch (e) {} }
-    clearTimeout(slowTimer); clearTimeout(giveUpTimer);
+    clearTimeout(slowTimer); clearTimeout(giveUpTimer); clearTimeout(escapeTimer);
   }
 
   // Called once the book is parsed/tokenized and the reader is live. Removes the
   // escape box and stops the slow/timeout timers.
   function loadDone() {
     loadFinished = true;
-    clearTimeout(slowTimer); clearTimeout(giveUpTimer);
+    clearTimeout(slowTimer); clearTimeout(giveUpTimer); clearTimeout(escapeTimer);
     var box = document.getElementById('loadEscape');
     if (box && box.parentNode) box.parentNode.removeChild(box);
   }
 
   function loadBook() {
-    showLoadingEscape();
-    setLoadingMsg('Loading this book…');
+    // Only show the loading screen if the book isn't ready almost immediately.
+    // Cache-path and small-book opens finish in a few ms and shouldn't flash a
+    // loading screen at all; a short grace window avoids that flicker while still
+    // showing the escape UI for genuinely slow loads.
+    escapeTimer = setTimeout(function () {
+      if (loadFinished) return;
+      showLoadingEscape();
+      setLoadingMsg('Loading this book…');
+    }, 250);
 
     // Escalate the message if it's slow, and hard-fail if it truly hangs.
     slowTimer = setTimeout(function () {
@@ -359,7 +366,7 @@
       renderWord(engine.current(), engine.snapshot());
       onState(engine.snapshot());
       wireControls();
-      switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read', { keepIndex: true });
+      switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
       loadDone();
     }
 
@@ -556,7 +563,7 @@
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
     document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
     document.getElementById('mRead').addEventListener('click', function () { switchView('read'); closeMenu(); });
-    document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp'); closeMenu(); });
+    document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp', true); closeMenu(); });
 
     setupSwipe(pageEl);
 
@@ -632,10 +639,10 @@
   }
 
   // Switch between paged ('read') and speed-read ('rsvp'). Never autoplays.
-  // opts.keepIndex: don't re-anchor the engine (used by startAt, which seeks to a
-  // tapped word right after switching).
-  function switchView(view, opts) {
-    opts = opts || {};
+  // When `snapToPage` is true (menu switch into speed-read with no word chosen),
+  // the engine seeks to the FIRST word currently visible on the page, so the
+  // rail starts where the reader's eyes were rather than at the resume point.
+  function switchView(view, snapToPage) {
     var cameFromRsvp = (currentView === 'rsvp');
     currentView = view;
     var readView = document.getElementById('pagedView');
@@ -664,16 +671,17 @@
     } else {
       // Speed-read: small page strip follows above the rail.
       rsvpView.hidden = false; readView.hidden = false;
+      // If entered from the menu with no word selected, start the rail at the
+      // first word currently visible on the page (paged.firstIndex) instead of
+      // wherever the engine was parked.
+      if (snapToPage && paged && paged.firstIndex != null) {
+        engine.seek(paged.firstIndex);
+      }
+      var railIdx = engine ? engine.index : 0;
       paged.buildWhenReady(tokens, function () {
-        // Entering speed-read from PAGED mode without picking a word: start at the
-        // first word visible on the current page — NOT the stale saved position
-        // the engine last left off at. (When a word was tapped, startAt passes
-        // keepIndex and seeks to that word itself, so we don't override it.)
-        if (!cameFromRsvp && !opts.keepIndex && engine && paged) {
-          var pageStart = paged.firstIndex;
-          if (pageStart != null && pageStart >= 0) engine.seek(pageStart);
-        }
-        paged.follow(engine ? engine.index : 0);
+        paged.follow(railIdx);
+        // Re-center the starting word in the rail after the view is laid out.
+        renderWord(engine.current(), engine.snapshot());
       });
     }
   }
@@ -841,7 +849,7 @@
     // Switch to the speed-read view FIRST so the rail is laid out, THEN seek —
     // this way the initial word is measured and centred in a visible rail instead
     // of landing off-centre until Play forces a re-render.
-    switchView('rsvp', { keepIndex: true });
+    switchView('rsvp');
     engine.seek(idx);
     paged.follow(idx);
     // One more centre pass after the view transition settles.
