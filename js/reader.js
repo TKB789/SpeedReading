@@ -1190,6 +1190,33 @@
     });
   }
 
+  // Keep the screen awake while the reader is open, so the display doesn't dim or
+  // lock mid-page. (A screen dim also disrupts the session pace meter's timing.)
+  // Uses the Screen Wake Lock API (Safari 16.4+, Chrome/Firefox); the browser
+  // auto-releases the lock when the tab is hidden, so we re-acquire it whenever
+  // the page becomes visible again. Fails silently where unsupported or when the
+  // OS refuses (e.g. low battery) — reading still works, the screen just dims.
+  var _wakeLock = null;
+  function acquireWakeLock() {
+    try {
+      if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+      navigator.wakeLock.request('screen').then(function (wl) {
+        _wakeLock = wl;
+        wl.addEventListener('release', function () { _wakeLock = null; });
+      }).catch(function () { /* refused (battery/policy) — ignore */ });
+    } catch (e) { /* unsupported — ignore */ }
+  }
+  document.addEventListener('visibilitychange', function () {
+    // Re-acquire after returning from a lock/tab-switch (the lock auto-released).
+    if (document.visibilityState === 'visible' && !_wakeLock) acquireWakeLock();
+  });
+  acquireWakeLock();
+  // iOS may reject the first request until a user gesture has occurred, so also
+  // try once on the first interaction. { once: true } keeps it a one-time cost.
+  ['pointerdown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, function () { if (!_wakeLock) acquireWakeLock(); }, { once: true });
+  });
+
   // One-time cleanup: earlier builds cached tokenized books in an IndexedDB
   // named 'rsvp-reader'. That cache was removed (it added reopen lag), so delete
   // the leftover database if present. Best-effort and harmless if it's absent.
