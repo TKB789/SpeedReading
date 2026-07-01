@@ -11,7 +11,7 @@
     "id": "pg75201",
     "title": "A farewell to arms",
     "author": "Hemingway, Ernest",
-    "wordCount": 88570,
+    "wordCount": 88569,
     "cover": null,
     "source": "Project Gutenberg #75201 — public domain"
   },
@@ -19,7 +19,7 @@
     "id": "pg18857",
     "title": "A Journey to the Centre of the Earth",
     "author": "Verne, Jules",
-    "wordCount": 85457,
+    "wordCount": 85445,
     "cover": null,
     "source": "Project Gutenberg #18857 — public domain"
   },
@@ -51,7 +51,7 @@
     "id": "pg103",
     "title": "Around the World in Eighty Days",
     "author": "Verne, Jules",
-    "wordCount": 63195,
+    "wordCount": 63194,
     "cover": null,
     "source": "Project Gutenberg #103 — public domain"
   },
@@ -70,6 +70,14 @@
     "wordCount": 161128,
     "cover": null,
     "source": "Project Gutenberg #345 — public domain"
+  },
+  {
+    "id": "pg45839",
+    "title": "Dracula",
+    "author": "Stoker, Bram",
+    "wordCount": 160647,
+    "cover": null,
+    "source": "Project Gutenberg #45839 — public domain"
   },
   {
     "id": "pg76639",
@@ -107,7 +115,7 @@
     "id": "pg36462",
     "title": "King Arthur and the Knights of the Round Table",
     "author": "Malory, Thomas, Sir",
-    "wordCount": 98562,
+    "wordCount": 98534,
     "cover": null,
     "source": "Project Gutenberg #36462 — public domain"
   },
@@ -115,7 +123,7 @@
     "id": "pg37106",
     "title": "Little Women; Or, Meg, Jo, Beth, and Amy",
     "author": "Alcott, Louisa May",
-    "wordCount": 192553,
+    "wordCount": 190149,
     "cover": null,
     "source": "Project Gutenberg #37106 — public domain"
   },
@@ -146,7 +154,7 @@
   {
     "id": "pg2701",
     "title": "Moby Dick; Or, The Whale",
-    "author": "Melville, Herman",
+    "author": "Herman Melville",
     "wordCount": 211465,
     "cover": null,
     "source": "Project Gutenberg #2701 — public domain"
@@ -155,17 +163,25 @@
     "id": "pg47530",
     "title": "Oliver Twist, Vol. 2 (of 3)",
     "author": "Dickens, Charles",
-    "wordCount": 50601,
+    "wordCount": 50531,
     "cover": null,
     "source": "Project Gutenberg #47530 — public domain"
   },
   {
     "id": "pg1342",
     "title": "Pride and Prejudice",
-    "author": "Austen, Jane",
-    "wordCount": 127236,
+    "author": "Jane Austen",
+    "wordCount": 126473,
     "cover": null,
     "source": "Project Gutenberg #1342 — public domain"
+  },
+  {
+    "id": "pg42671",
+    "title": "Pride and Prejudice",
+    "author": "Austen, Jane",
+    "wordCount": 121789,
+    "cover": null,
+    "source": "Project Gutenberg #42671 — public domain"
   },
   {
     "id": "pg1513",
@@ -195,7 +211,7 @@
     "id": "pg74",
     "title": "The Adventures of Tom Sawyer, Complete",
     "author": "Twain, Mark",
-    "wordCount": 70426,
+    "wordCount": 69977,
     "cover": null,
     "source": "Project Gutenberg #74 — public domain"
   },
@@ -209,9 +225,9 @@
   },
   {
     "id": "pg31100",
-    "title": "The Complete Project Gutenberg Works of Jane Austen",
-    "author": "Jane Austen",
-    "wordCount": 776536,
+    "title": "The Complete Project Gutenberg Works of Jane Austen: A Linked Index of all PG Editions of Jane Austen",
+    "author": "Austen, Jane",
+    "wordCount": 776270,
     "cover": null,
     "source": "Project Gutenberg #31100 — public domain"
   },
@@ -242,7 +258,7 @@
   {
     "id": "pg70854",
     "title": "The Countess of Pembroke's Arcadia",
-    "author": "Philip Sidney",
+    "author": "Sidney, Philip",
     "wordCount": 344922,
     "cover": null,
     "source": "Project Gutenberg #70854 — public domain"
@@ -274,8 +290,8 @@
   {
     "id": "pg564",
     "title": "The Mystery of Edwin Drood",
-    "author": "Charles Dickens",
-    "wordCount": 95616,
+    "author": "Dickens, Charles",
+    "wordCount": 95543,
     "cover": null,
     "source": "Project Gutenberg #564 — public domain"
   },
@@ -314,15 +330,15 @@
   {
     "id": "pg42",
     "title": "The strange case of Dr. Jekyll and Mr. Hyde",
-    "author": "Robert Louis Stevenson",
-    "wordCount": 25685,
+    "author": "Stevenson, Robert Louis",
+    "wordCount": 25684,
     "cover": null,
     "source": "Project Gutenberg #42 — public domain"
   },
   {
     "id": "pg120",
     "title": "Treasure Island",
-    "author": "Robert Louis Stevenson",
+    "author": "Stevenson, Robert Louis",
     "wordCount": 68270,
     "cover": null,
     "source": "Project Gutenberg #120 — public domain"
