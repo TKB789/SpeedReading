@@ -60,6 +60,12 @@
       var anchor = (currentView === 'rsvp')
         ? (engine ? engine.index : 0)
         : paged.currentAnchor();
+      // A reflow isn't a page turn: abandon the current timing span (its layout is
+      // gone) so the post-reflow onPageChange re-arms timing without logging a
+      // partial, defunct-layout page. _wpmLastPageKey=null makes the next change
+      // count as a fresh start rather than a spurious commit.
+      if (typeof Wpm !== 'undefined' && Wpm.abandon) Wpm.abandon();
+      _wpmLastPageKey = null;
       paged.invalidate();
       (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
         paged.goToIndex(anchor);
@@ -542,7 +548,7 @@
 
   var paged = null, currentView = 'read';
   var curPageInChapter = null;   // latest page-within-chapter for durable resume
-  var _wpmLastPageStart = null;  // first-word index of the last page banked by the meter
+  var _wpmLastPageKey = null;    // stable "chapter:pageInChapter" of the last page timed
 
   // ---- Reading-pace meter (per page) ----------------------------------------
   // Shows the words-per-minute of the LAST fully-read page, for this browser
@@ -640,6 +646,14 @@
       render();
     }
     // Speed-read no longer feeds the meter per-tick; pace is page-turn-only.
+    // Abandon the in-progress page WITHOUT committing or recording it — used when
+    // the page layout is invalidated by a reflow (font size / resize), so a
+    // partial read of a now-defunct layout isn't logged as a real page.
+    function abandon() {
+      timing = false;
+      pageWords = 0;
+      pageActiveMs = 0;
+    }
     function value() {
       return lastWpm;
     }
@@ -687,7 +701,7 @@
     setInterval(accrue, 5000);
     window.addEventListener('beforeunload', commit);
 
-    return { startPage: startPage, commit: commit, render: render,
+    return { startPage: startPage, commit: commit, abandon: abandon, render: render,
              getHistory: getHistory, clearHistory: clearHistory,
              renderHistory: renderHistory };
   })();
@@ -715,12 +729,15 @@
         }
         // Session pace: bank the previous page's time and start timing the newly
         // shown page — for BOTH views, so speed-reading is measured by how long
-        // each page of text is on screen, exactly like page reading. Guarded on
-        // the page's first word actually changing, so background re-flows (stream
-        // inserts calling follow()/shiftPositions) don't fire a spurious turn.
-        if (info && info.wordsOnPage != null && info.startIndex != null &&
-            info.startIndex !== _wpmLastPageStart) {
-          _wpmLastPageStart = info.startIndex;
+        // each page of text is on screen, exactly like page reading. A page is
+        // identified by its STABLE content identity (chapter + page-in-chapter),
+        // NOT by startIndex: background streaming and the totals pass re-render
+        // the SAME page with a shifted startIndex, which would otherwise look like
+        // a turn and wrongly commit the page mid-read (the post-pagination skew).
+        var pageKey = (info && info.chapter != null && info.pageInChapter != null)
+          ? (info.chapter + ':' + info.pageInChapter) : null;
+        if (pageKey != null && info.wordsOnPage != null && pageKey !== _wpmLastPageKey) {
+          _wpmLastPageKey = pageKey;
           Wpm.startPage(info.wordsOnPage);
         }
         // Keep the engine's position in sync with the page the reader is on, so
@@ -780,6 +797,10 @@
       clearTimeout(rzTimer);
       rzTimer = setTimeout(function () {
         var anchor = engine ? engine.index : 0;
+        // Resize re-flows the page: abandon the current timing span (see font-size
+        // handler) so the reflow's onPageChange doesn't log a partial page.
+        if (typeof Wpm !== 'undefined' && Wpm.abandon) Wpm.abandon();
+        _wpmLastPageKey = null;
         paged.goToIndex(anchor);
         if (currentView === 'rsvp') paged.follow(anchor);
         // Totals are size-specific; recompute if the book is fully tokenized.
@@ -866,7 +887,7 @@
     // Switching views ends the current page's timing span. Bank it and clear the
     // page-turn guard so the destination view's first page starts timing fresh.
     Wpm.commit();
-    _wpmLastPageStart = null;
+    _wpmLastPageKey = null;
     currentView = view;
     var readView = document.getElementById('pagedView');
     var rsvpView = document.getElementById('rsvpView');
