@@ -52,13 +52,16 @@
   // `pct` is a cached approximate progress percentage for the library badge (the
   // reader computes it once the book is fully loaded; may be absent meanwhile).
   function getProgress(bookId) { return lsGet(KEY_PROGRESS + bookId, null); }
-  function saveProgress(bookId, coord, chapter, mode, pct) {
+  function saveProgress(bookId, coord, chapter, mode, pct, pageInChapter) {
     var prev = lsGet(KEY_PROGRESS + bookId, null);
     // Preserve a previously-known pct if this save doesn't supply one (e.g. saved
     // during the brief pre-fully-loaded window).
     var keepPct = (pct != null) ? pct : (prev && prev.pct != null ? prev.pct : null);
+    // Preserve a previously-known page if this save doesn't supply one.
+    var keepPage = (pageInChapter != null) ? pageInChapter
+      : (prev && prev.pageInChapter != null ? prev.pageInChapter : null);
     return lsSet(KEY_PROGRESS + bookId, { coord: coord, chapter: chapter,
-      pct: keepPct, mode: mode || 'read', updated: Date.now() });
+      pct: keepPct, mode: mode || 'read', pageInChapter: keepPage, updated: Date.now() });
   }
   function clearProgress(bookId) { lsDel(KEY_PROGRESS + bookId); }
 

@@ -104,6 +104,9 @@
   var chapterStart = {};      // chapter → first index in `tokens` (rebuilt as it grows)
   var fullyLoaded = false;    // every chapter tokenized → global % is exact
   var resumeMode = 'read';
+  var resumePageInChapter = null;   // saved exact page within the resume chapter
+  var resumeChapterNum = 0;         // saved chapter (for exact-page restore)
+  var didInitialPaint = false;      // guard: only exact-page-restore on first build
   // Loading-state machinery: an AbortController so we can cancel a slow fetch,
   // plus timers that escalate the message ("taking longer…") and eventually
   // give up. loadDone() clears all of this once the book is ready or has failed.
@@ -265,6 +268,11 @@
     var resumeCoord = (prog && prog.coord) ? prog.coord
       : { chapter: (prog && prog.chapter != null) ? prog.chapter : 0, para: 0, word: 0 };
     var isDeepResume = resumeCoord.chapter > 0 || resumeCoord.para > 0 || resumeCoord.word > 0;
+    // Exact page-within-chapter to restore on the first paged render (more robust
+    // than resolving a token to a page, which lazy pagination can shift).
+    resumePageInChapter = (prog && prog.pageInChapter != null) ? prog.pageInChapter : null;
+    resumeChapterNum = resumeCoord.chapter || 0;
+    didInitialPaint = false;
 
     settings = Store.getSettings();
     var startWpm = settings.wpm || 400;
@@ -502,6 +510,7 @@
 
 
   var paged = null, currentView = 'read';
+  var curPageInChapter = null;   // latest page-within-chapter for durable resume
   // Tap interaction state: 'idle' (normal) or 'armed' (box outlined, prompt up).
   var tapState = 'idle';
   var selectedIndex = null;   // word chosen while armed (null = none yet)
@@ -514,6 +523,8 @@
         var meta = document.getElementById('pageNum');
         if (meta) meta.textContent = pagedStatusText(info);
         setTopChapter(info.chapter);
+        // Remember the exact page within the chapter for durable resume.
+        if (info && info.pageInChapter != null) curPageInChapter = info.pageInChapter;
         // Keep the engine's position in sync with the page the reader is on, so
         // reopening resumes to THIS page. Page turns don't move the RSVP engine
         // on their own, so without this the only saved position was the rail's,
@@ -522,7 +533,7 @@
         // the page strip in RSVP mode) to avoid fighting the engine.
         if (currentView === 'read' && engine && info && info.startIndex != null) {
           engine.index = info.startIndex;
-          onState(engine.snapshot());   // debounced-saves the new coordinate
+          onState(engine.snapshot());   // debounced-saves the new coordinate + page
         }
       }
     });
@@ -534,8 +545,19 @@
       paged.setChapterCount(book.chapters.length);
     }
     // Window the opening screen at the resumed position. No full-book build.
+    // On the FIRST paint after reopening, prefer restoring the exact saved page
+    // within the resume chapter (deterministic given the box size), which avoids
+    // the off-by-a-page drift that resolving a token to a page can cause while
+    // pagination is lazy or the box height hasn't settled. Fall back to the
+    // token's page if we have no saved page or the exact restore can't apply.
     paged.buildWhenReady(tokens, function () {
-      paged.goToIndex(engine ? engine.index : 0);
+      var restored = false;
+      if (!didInitialPaint && resumePageInChapter != null) {
+        var hint = (engine ? engine.index : 0);
+        restored = paged.goToChapterPage(resumeChapterNum, resumePageInChapter, hint);
+      }
+      if (!restored) paged.goToIndex(engine ? engine.index : 0);
+      didInitialPaint = true;
     });
 
     document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
@@ -973,7 +995,11 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
-      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct);
+      // Persist the exact page only when the paged view is active; in speed-read
+      // the page isn't the meaningful position, so don't overwrite a good page
+      // with a stale one (saveProgress keeps the previous page when null).
+      var page = (currentView === 'read') ? curPageInChapter : null;
+      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct, page);
     }, 400);
   }
 
@@ -1031,7 +1057,8 @@
       if (!engine) return;
       var snap = engine.snapshot();
       var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
-      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct);
+      var page = (currentView === 'read') ? curPageInChapter : null;
+      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct, page);
     }
     window.addEventListener('beforeunload', saveNow);
     window.addEventListener('pagehide', saveNow);

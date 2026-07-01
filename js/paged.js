@@ -382,6 +382,20 @@
     this._renderPage(this._pageContaining(pos));
   };
 
+  // Restore an EXACT page within a chapter (1-based pageInChapter), used on
+  // reopen. Pagination is deterministic for a given box size, so rendering the
+  // same page number returns to the same place — more reliable than resolving a
+  // token to a page when lazy pagination or a not-yet-settled box height could
+  // shift boundaries. Falls back to clamping if the chapter now has fewer pages
+  // (e.g. a different font size), and returns false if the chapter isn't present.
+  Paged.prototype.goToChapterPage = function (chapter, pageInChapter, hintPos) {
+    if (!this._ensureChapterPaginated(chapter, hintPos)) return false;
+    var n = this._pages.length || 1;
+    var idx = Math.max(0, Math.min(n - 1, (pageInChapter || 1) - 1));
+    this._renderPage(idx);
+    return true;
+  };
+
   // Jump to an index AND highlight that word (used when switching speed→page).
   Paged.prototype.highlight = function (idx) {
     this.activeIndex = idx;
