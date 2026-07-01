@@ -9,9 +9,16 @@
  * books and uploaded books are chaptered identically.
  *
  * Layout it expects / produces:
- *   books-src/<slug>.txt   ← you add these (plain text; Gutenberg headers OK)
- *   books/<id>.json        ← generated: { title, author, wordCount, chapters }
+ *   books-src/<slug>.txt   ← you add these (deleted by CI after a successful build)
+ *   books/<id>.json        ← generated + kept: { title, author, wordCount, chapters }
  *   books/manifest.json    ← generated: [ { id, title, author, wordCount, ... } ]
+ *
+ * The CI workflow removes each .txt after building, so the source text isn't
+ * stored in the repo alongside its JSON. This script therefore does NOT prune a
+ * book's JSON when its .txt is absent — a missing .txt is the normal state of an
+ * already-built book. The manifest is rebuilt from every JSON present in books/,
+ * so books built in earlier runs are preserved. To remove a book, delete its
+ * books/<id>.json.
  *
  * The book id is derived from the .txt filename (its slug), so a file's book
  * JSON is stable across rebuilds and progress/bookmarks keyed on id survive.
@@ -68,9 +75,10 @@ function main() {
     .sort();
 
   if (!txtFiles.length) {
-    console.log('books-src/ has no .txt files — writing empty manifest.');
-    fs.writeFileSync(MANIFEST, '[]\n');
-    return;
+    // No new source text — but already-built books/<id>.json may exist (their
+    // .txt was deleted after a prior build). Fall through so the manifest is
+    // rebuilt from those, rather than wiping it.
+    console.log('books-src/ has no .txt files — rebuilding manifest from existing books/.');
   }
 
   var manifest = [];
@@ -98,6 +106,11 @@ function main() {
     // Sidecar overrides win outright (lets you fix a bad auto-detected title).
     if (sidecar.title) book.title = sidecar.title;
     if (sidecar.author) book.author = sidecar.author;
+    // Persist presentation flags INTO the book JSON. The sidecar is deleted by
+    // CI after building, and the manifest is later rebuilt from the JSON, so
+    // storing these here is what makes them survive future rebuilds.
+    if (sidecar.cover) book.cover = sidecar.cover;
+    if (sidecar.sample) book.sample = true;
 
     if (!book.chapters.length || !book.wordCount) {
       console.warn('  ! no readable text in ' + file + ' — skipping.');
@@ -115,29 +128,43 @@ function main() {
       author: book.author,
       wordCount: book.wordCount
     };
-    if (sidecar.cover) entry.cover = sidecar.cover;
-    if (sidecar.sample) entry.sample = true;
+    if (book.cover) entry.cover = book.cover;
+    if (book.sample) entry.sample = true;
     manifest.push(entry);
   });
 
-  // Prune stale generated book JSONs whose source .txt was removed. We only
-  // delete files that correspond to a manifest slug pattern we manage, never
-  // arbitrary files — a book is "managed" if a books-src file could produce it.
-  var keep = {};
-  manifest.forEach(function (m) { keep[m.id + '.json'] = true; });
-  keep['manifest.json'] = true;
+  // NOTE: we intentionally do NOT prune books/<id>.json when its source .txt is
+  // absent. The workflow deletes each .txt from the repo after a successful
+  // build (to save storage), so a missing .txt is the NORMAL state for an
+  // already-built book — its JSON is the thing we keep. To remove a book,
+  // delete its books/<id>.json directly (and its manifest entry is rebuilt
+  // from whatever JSONs remain; see below).
+
+  // Rebuild the manifest from ALL book JSONs actually present in books/, not
+  // just the ones we built this run. This way books whose .txt was already
+  // removed in a previous run stay in the manifest. We read each JSON's own
+  // title/author/wordCount; sidecar cover/sample (if the sidecar still exists)
+  // is layered on for books built this run.
+  var builtById = {};
+  manifest.forEach(function (m) { builtById[m.id] = m; });
+
+  var full = [];
   fs.readdirSync(OUT_DIR).forEach(function (f) {
-    if (!/\.json$/i.test(f)) return;
-    if (keep[f]) return;
-    // Only prune if a same-named .txt or sidecar is absent from books-src, i.e.
-    // this JSON is genuinely orphaned by a managed source that no longer exists.
-    var base = f.replace(/\.json$/i, '');
-    var hadSource = txtFiles.some(function (t) { return slugify(t) === base; });
-    if (!hadSource) {
-      fs.unlinkSync(path.join(OUT_DIR, f));
-      console.log('  - pruned orphaned books/' + f);
+    if (!/\.json$/i.test(f) || f === 'manifest.json') return;
+    var id = f.replace(/\.json$/i, '');
+    if (builtById[id]) { full.push(builtById[id]); return; }  // built this run
+    // Pre-existing book (its .txt is already gone): read metadata from its JSON.
+    try {
+      var b = JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8'));
+      var e = { id: id, title: b.title, author: b.author, wordCount: b.wordCount };
+      if (b.cover) e.cover = b.cover;
+      if (b.sample) e.sample = true;
+      full.push(e);
+    } catch (e) {
+      console.warn('  ! skipping unreadable books/' + f + ': ' + e.message);
     }
   });
+  manifest = full;
 
   manifest.sort(function (a, b) { return String(a.title).localeCompare(String(b.title)); });
   fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + '\n');
