@@ -140,6 +140,15 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   margin: 0 0 6px; letter-spacing: 0.01em;
 }
 .lib-head p { color: var(--fg-dim); margin: 0; font-size: 1.02rem; font-style: italic; }
+.reading-note { margin: 14px 0 18px; padding: 14px 16px; border: 1px solid var(--line);
+  border-left: 3px solid var(--accent, #b98a3e); border-radius: var(--radius);
+  background: var(--bg-2);
+  background: color-mix(in srgb, var(--bg-2) 85%, transparent); max-width: 70ch; }
+.reading-note p { margin: 0 0 8px; font-size: 0.9rem; line-height: 1.5; color: var(--fg-dim); }
+.reading-note p:last-child { margin-bottom: 0; }
+.reading-note strong { color: var(--fg); }
+.reading-note-src { font-size: 0.8rem; }
+.reading-note-src a { color: var(--fg-dim); }
 /* Library controls: search + sort on one row, count below */
 .lib-controls { display: flex; gap: 12px; align-items: center; margin: 22px 0 8px; flex-wrap: wrap; }
 .search { flex: 1 1 240px; margin: 0; }
@@ -377,6 +386,8 @@ body.font-large  { --page-font: clamp(1.32rem, 4.9vw, 1.62rem); }
 .page-meta { display: flex; justify-content: space-between; align-items: baseline;
   margin-top: 8px; color: var(--fg-dim); font-size: 0.8rem; font-style: italic; flex: 0 0 auto; }
 .page-meta .hint { font-size: 0.74rem; }
+.page-meta .session-wpm { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums;
+  font-size: 0.74rem; letter-spacing: 0.02em; color: var(--fg-dim); opacity: 0.85; }
 @media (max-width: 520px) {
   /* Font and padding are handled responsively by clamp() on .page, so we don't
      hard-override them here anymore (that was fighting the fluid sizing).
