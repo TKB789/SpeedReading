@@ -686,17 +686,17 @@
         }
       });
     } else {
-      // Speed-read: small page strip follows above the rail.
+      // Speed-read: the page strip above the rail always STARTS at the RSVP word
+      // (top-aligned), so the strip begins where speed-reading begins.
       rsvpView.hidden = false; readView.hidden = false;
-      // If entered from the menu with no word selected, start the rail at the
-      // first word currently visible on the page (paged.firstIndex) instead of
-      // wherever the engine was parked.
+      // If entered from the menu with no word selected, start at the first word
+      // currently visible on the read page (paged.firstIndex).
       if (snapToPage && paged && paged.firstIndex != null) {
         engine.seek(paged.firstIndex);
       }
       var railIdx = engine ? engine.index : 0;
       paged.buildWhenReady(tokens, function () {
-        paged.follow(railIdx);
+        if (paged.showFrom) paged.showFrom(railIdx); else paged.follow(railIdx);
         // Re-center the starting word in the rail after the view is laid out.
         renderWord(engine.current(), engine.snapshot());
       });
@@ -868,7 +868,9 @@
     // of landing off-centre until Play forces a re-render.
     switchView('rsvp');
     engine.seek(idx);
-    paged.follow(idx);
+    // Put the chosen word at the TOP of the page strip (first word shown), so the
+    // strip starts where speed-reading starts rather than showing it mid-page.
+    if (paged.showFrom) paged.showFrom(idx); else paged.follow(idx);
     // One more centre pass after the view transition settles.
     requestAnimationFrame(function () { renderWord(engine.current(), engine.snapshot()); });
   }

@@ -396,6 +396,36 @@
     return true;
   };
 
+  // Render a page that BEGINS exactly at engine index `idx`, so the tapped/target
+  // word is the first word shown (top-aligned) rather than sitting mid-page. This
+  // is an ad-hoc page laid out from `idx` downward; it does NOT rewrite the
+  // chapter's fixed page grid (that would shift page numbers and break resume).
+  // We keep _pageIdx pointed at the grid page that contains `idx`, so turning the
+  // page with next()/prev() continues correctly from the real grid.
+  Paged.prototype.showFrom = function (idx) {
+    var pos = this._wordPosOfIndex(idx);
+    var ch = (this.tokens[pos] && this.tokens[pos].chapter) || 0;
+    if (!this._ensureChapterPaginated(ch, pos)) return false;
+    // Clamp pos to this chapter's bounds so we don't spill past its end.
+    var b = this._chapterBounds(ch, pos);
+    if (pos < b.start) pos = b.start;
+    if (pos >= b.end) pos = Math.max(b.start, b.end - 1);
+    // Lay out one page from pos downward (display), and set live state to it.
+    var endPos = this._fillPage(pos, b.end, false);
+    if (endPos <= pos) endPos = Math.min(b.end, pos + 1);
+    this.startPos = pos;
+    this.endPos = endPos;
+    this._pageIdx = this._pageContaining(pos);  // grid page for subsequent turns
+    var fw = this._wordAt(pos);
+    this.firstIndex = fw ? fw.word.index : pos;
+    var li = endPos - 1;
+    while (li > pos && this.tokens[li] && /\u00AD$/.test(this.tokens[li].text)) li--;
+    this.lastIndex = li;
+    this._applyHighlight();
+    this.onPageChange(this.pageInfo());
+    return true;
+  };
+
   // Jump to an index AND highlight that word (used when switching speed→page).
   Paged.prototype.highlight = function (idx) {
     this.activeIndex = idx;
