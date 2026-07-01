@@ -140,29 +140,61 @@ function main() {
   // delete its books/<id>.json directly (and its manifest entry is rebuilt
   // from whatever JSONs remain; see below).
 
-  // Rebuild the manifest from ALL book JSONs actually present in books/, not
-  // just the ones we built this run. This way books whose .txt was already
-  // removed in a previous run stay in the manifest. We read each JSON's own
-  // title/author/wordCount; sidecar cover/sample (if the sidecar still exists)
-  // is layered on for books built this run.
+  // Rebuild the manifest from ALL book JSONs present in books/, so books built
+  // in earlier runs — including any created by the singular build-book.js —
+  // stay listed. We also MERGE the pre-existing manifest.json: build-book.js
+  // stores `cover`/`source` only on the manifest entry (not inside <id>.json),
+  // so reading them back from the old manifest is the only way to keep them.
   var builtById = {};
   manifest.forEach(function (m) { builtById[m.id] = m; });
+
+  // Load whatever manifest already exists (may have been written by
+  // build-book.js) and index it, to preserve fields we don't otherwise know.
+  var priorById = {};
+  if (fs.existsSync(MANIFEST)) {
+    try {
+      (JSON.parse(fs.readFileSync(MANIFEST, 'utf8')) || []).forEach(function (m) {
+        if (m && m.id) priorById[m.id] = m;
+      });
+    } catch (e) {
+      console.warn('  ! existing manifest.json is unreadable, rebuilding from JSONs: ' + e.message);
+    }
+  }
 
   var full = [];
   fs.readdirSync(OUT_DIR).forEach(function (f) {
     if (!/\.json$/i.test(f) || f === 'manifest.json') return;
     var id = f.replace(/\.json$/i, '');
-    if (builtById[id]) { full.push(builtById[id]); return; }  // built this run
-    // Pre-existing book (its .txt is already gone): read metadata from its JSON.
-    try {
-      var b = JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8'));
-      var e = { id: id, title: b.title, author: b.author, wordCount: b.wordCount };
-      if (b.cover) e.cover = b.cover;
-      if (b.sample) e.sample = true;
-      full.push(e);
-    } catch (e) {
-      console.warn('  ! skipping unreadable books/' + f + ': ' + e.message);
+
+    var entry;
+    if (builtById[id]) {
+      entry = builtById[id];            // built this run (freshest)
+    } else {
+      // Pre-existing book: read core metadata from its own JSON.
+      try {
+        var b = JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8'));
+        entry = { id: id, title: b.title, author: b.author, wordCount: b.wordCount };
+        if (b.cover) entry.cover = b.cover;
+        if (b.sample) entry.sample = true;
+      } catch (e) {
+        console.warn('  ! skipping unreadable books/' + f + ': ' + e.message);
+        return;
+      }
     }
+
+    // Layer on any manifest-only fields from the prior manifest that we didn't
+    // set ourselves (e.g. `source`, or a `cover` that build-book.js stored only
+    // in the manifest). Never overwrite a value we already have.
+    var prior = priorById[id];
+    if (prior) {
+      Object.keys(prior).forEach(function (k) {
+        if (entry[k] === undefined && prior[k] !== undefined && prior[k] !== null) {
+          entry[k] = prior[k];
+        }
+      });
+    }
+
+    full.push(entry);
   });
   manifest = full;
 
