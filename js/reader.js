@@ -560,8 +560,8 @@
       didInitialPaint = true;
     });
 
-    document.getElementById('pagePrev').addEventListener('click', function () { paged.prev(); });
-    document.getElementById('pageNext').addEventListener('click', function () { paged.next(); });
+    document.getElementById('pagePrev').addEventListener('click', function () { turnPage(-1); });
+    document.getElementById('pageNext').addEventListener('click', function () { turnPage(1); });
     document.getElementById('mRead').addEventListener('click', function () { switchView('read'); closeMenu(); });
     document.getElementById('mRsvp').addEventListener('click', function () { switchView('rsvp', true); closeMenu(); });
 
@@ -613,11 +613,28 @@
           Math.abs(dy) < V_LIMIT * 3 && dt < 800) {
         // Suppress the synthetic click so the swipe doesn't also select a word.
         suppressNextPageTap = true;
-        if (dx < 0) paged.next(); else paged.prev();
+        if (dx < 0) turnPage(1); else turnPage(-1);
       }
     }, { passive: true });
   }
   var suppressNextPageTap = false;
+
+  // Turn the page strip one page in `dir` (+1 next, -1 prev). In the paged view
+  // this just navigates; onPageChange keeps the engine + saved position in sync.
+  // In speed-read (rsvp) view the page strip and the word rail are separate, so a
+  // page turn wouldn't otherwise move the rail — here we snap the RSVP word to the
+  // FIRST word of the newly shown page so the rail keeps up with where you paged
+  // to. Playback pauses on a manual turn so it doesn't immediately run off.
+  function turnPage(dir) {
+    if (!paged) return;
+    if (dir > 0) paged.next(); else paged.prev();
+    if (currentView === 'rsvp' && engine && paged.firstIndex != null) {
+      if (engine.snapshot().playing) engine.pause();
+      engine.seek(paged.firstIndex);
+      renderWord(engine.current(), engine.snapshot());
+      onState(engine.snapshot());   // saves the new position
+    }
+  }
 
   // Format the paged status line from a pageInfo object. Until the background
   // total-page pass is done, show just the percent; once ready, show
