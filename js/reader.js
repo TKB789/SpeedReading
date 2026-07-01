@@ -191,34 +191,13 @@
 
     loadController = ('AbortController' in window) ? new AbortController() : null;
     var fetchOpts = loadController ? { signal: loadController.signal } : {};
-
-    // Try the raw-JSON cache first so a reopen skips the network entirely and
-    // goes straight to (cached) tokenization / first paint. On a miss, fetch and
-    // populate the cache for next time.
-    function fetchFromNetwork() {
-      fetch('books/' + encodeURIComponent(bookId) + '.json', fetchOpts)
-        .then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
-        .then(function (b) {
-          if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
-            try { TokenCache.putRaw(bookId, b); } catch (e) {}
-          }
-          setTimeout(function () { setup(b); }, 0);
-        })
-        .catch(function (err) {
-          if (err && err.name === 'AbortError') return; // user left on purpose
-          fail('Could not load that book.');
-        });
-    }
-
-    if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
-      TokenCache.getRaw(bookId).then(function (cachedBook) {
-        if (loadFinished) return;                 // aborted meanwhile
-        if (cachedBook && cachedBook.chapters) { setTimeout(function () { setup(cachedBook); }, 0); }
-        else { fetchFromNetwork(); }
-      }).catch(fetchFromNetwork);
-    } else {
-      fetchFromNetwork();
-    }
+    fetch('books/' + encodeURIComponent(bookId) + '.json', fetchOpts)
+      .then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
+      .then(function (b) { setTimeout(function () { setup(b); }, 0); })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return; // user left on purpose
+        fail('Could not load that book.');
+      });
   }
   function fail(msg) {
     loadDone();
@@ -316,45 +295,15 @@
     });
 
     var nextChAfter, nextChBefore;
-    var loadedFromCache = false;
 
-    // Fast path: if this book's full tokenization is cached (from a prior open),
-    // load it directly and skip ALL re-tokenization — this removes the reopen lag.
-    // The cache is async (IndexedDB); we kick off a check, and if it misses (or
-    // isn't available) we fall back to the normal incremental tokenization.
+    // Load path: tokenize + paint the opening chapter immediately, then stream
+    // the rest in the background. No cross-open token cache — the incremental
+    // stream is fast on its own, and a cache read + full decode was adding lag to
+    // every reopen (the whole book had to be decoded before the first paint).
+    // The one thing we DO persist cheaply is reading position (handled elsewhere),
+    // so a reopen resumes exactly where you were and paints that chapter first.
     function beginLoad() {
-      if (typeof TokenCache !== 'undefined' && TokenCache.available()) {
-        TokenCache.get(bookId).then(function (cached) {
-          if (cached && cached.length) { loadFromCache(cached); }
-          else { beginIncremental(); }
-        }).catch(function () { beginIncremental(); });
-      } else {
-        beginIncremental();
-      }
-    }
-
-    // Load a fully-tokenized book from cache in one shot, then go live.
-    function loadFromCache(cached) {
-      // A cache hit means we're about to go live almost immediately — cancel the
-      // pending loading-screen timer so it can't flash mid-rehydration.
-      clearTimeout(escapeTimer);
-      loadedFromCache = true;
-      for (var i = 0; i < cached.length; i++) tokens.push(cached[i]);
-      indexChapters();
-      if (isDeepResume) {
-        var startIdx = Coords.resolve(tokens, resumeCoord, chapterStart);
-        engine.index = startIdx < 0 ? 0 : startIdx;
-      } else {
-        engine.index = 0;
-      }
-      fullyLoaded = true;            // the whole book is present immediately
-      goLive();
-      updateScrubMax();
-      if (engine) onState(engine.snapshot());
-      // Totals can compute right away since every chapter is present.
-      if (paged && book && book.chapters) {
-        paged.computeTotals(book.chapters.length, function () { refreshPagedStatus(); });
-      }
+      beginIncremental();
     }
 
     // Normal path: tokenize the resume/opening chapter now, stream the rest.
@@ -483,12 +432,6 @@
         fullyLoaded = true;        // global token count is now exact → % is exact
         updateScrubMax();
         if (engine) onState(engine.snapshot());
-        // Persist the fully-tokenized book so the NEXT open skips re-tokenizing
-        // (the main reopen lag). Tokens are in chapter order here. Fire-and-forget
-        // — caching is a pure optimization; failure just means we re-tokenize.
-        if (!loadedFromCache && typeof TokenCache !== 'undefined' && TokenCache.available()) {
-          try { TokenCache.put(bookId, tokens.slice()); } catch (e) {}
-        }
         // Now that every chapter is tokenized, compute total page counts in the
         // background (per-chapter, time-sliced). This populates "page N of TOTAL".
         if (paged && book && book.chapters) {
@@ -1086,6 +1029,15 @@
       if (document.visibilityState === 'hidden') saveNow();
     });
   }
+
+  // One-time cleanup: earlier builds cached tokenized books in an IndexedDB
+  // named 'rsvp-reader'. That cache was removed (it added reopen lag), so delete
+  // the leftover database if present. Best-effort and harmless if it's absent.
+  try {
+    if (typeof indexedDB !== 'undefined' && indexedDB && indexedDB.deleteDatabase) {
+      indexedDB.deleteDatabase('rsvp-reader');
+    }
+  } catch (e) {}
 
   if (!bookId) fail('No book specified.');
   else loadBook();
