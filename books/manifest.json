@@ -34,11 +34,10 @@
     "wordCount": 109978
   },
   {
-    "id": "pg11",
+    "id": "alice-s-adventures-in-wonderland",
     "title": "Alice's Adventures in Wonderland",
-    "author": "Carroll, Lewis",
-    "wordCount": 26441,
-    "source": "Project Gutenberg #11 — public domain"
+    "author": "Lewis Carroll",
+    "wordCount": 26371
   },
   {
     "id": "pg103",
@@ -74,6 +73,12 @@
     "author": "Mary Wollstonecraft Shelley",
     "wordCount": 74919,
     "source": "Project Gutenberg #84 — public domain"
+  },
+  {
+    "id": "frankenstein",
+    "title": "Frankenstein; or, the Modern Prometheus",
+    "author": "Mary Shelley",
+    "wordCount": 74903
   },
   {
     "id": "pg6593",
@@ -123,6 +128,12 @@
     "author": "Eliot, George",
     "wordCount": 315840,
     "source": "Project Gutenberg #145 — public domain"
+  },
+  {
+    "id": "moby-dick",
+    "title": "Moby Dick; Or, The Whale",
+    "author": "Herman Melville",
+    "wordCount": 211406
   },
   {
     "id": "pg2701",
