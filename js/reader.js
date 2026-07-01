@@ -359,7 +359,7 @@
       renderWord(engine.current(), engine.snapshot());
       onState(engine.snapshot());
       wireControls();
-      switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read');
+      switchView(resumeMode === 'rsvp' ? 'rsvp' : 'read', { keepIndex: true });
       loadDone();
     }
 
@@ -632,7 +632,10 @@
   }
 
   // Switch between paged ('read') and speed-read ('rsvp'). Never autoplays.
-  function switchView(view) {
+  // opts.keepIndex: don't re-anchor the engine (used by startAt, which seeks to a
+  // tapped word right after switching).
+  function switchView(view, opts) {
+    opts = opts || {};
     var cameFromRsvp = (currentView === 'rsvp');
     currentView = view;
     var readView = document.getElementById('pagedView');
@@ -661,7 +664,17 @@
     } else {
       // Speed-read: small page strip follows above the rail.
       rsvpView.hidden = false; readView.hidden = false;
-      paged.buildWhenReady(tokens, function () { paged.follow(engine ? engine.index : 0); });
+      paged.buildWhenReady(tokens, function () {
+        // Entering speed-read from PAGED mode without picking a word: start at the
+        // first word visible on the current page — NOT the stale saved position
+        // the engine last left off at. (When a word was tapped, startAt passes
+        // keepIndex and seeks to that word itself, so we don't override it.)
+        if (!cameFromRsvp && !opts.keepIndex && engine && paged) {
+          var pageStart = paged.firstIndex;
+          if (pageStart != null && pageStart >= 0) engine.seek(pageStart);
+        }
+        paged.follow(engine ? engine.index : 0);
+      });
     }
   }
 
@@ -828,7 +841,7 @@
     // Switch to the speed-read view FIRST so the rail is laid out, THEN seek —
     // this way the initial word is measured and centred in a visible rail instead
     // of landing off-centre until Play forces a re-render.
-    switchView('rsvp');
+    switchView('rsvp', { keepIndex: true });
     engine.seek(idx);
     paged.follow(idx);
     // One more centre pass after the view transition settles.

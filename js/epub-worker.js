@@ -31,7 +31,7 @@ function ensureJSZip(base) {
   try {
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
   } catch (e) {
-    importScripts(base + 'js/vendor/jszip.min.js?v=1782930000');
+    importScripts(base + 'js/vendor/jszip.min.js?v=1782940000');
   }
   JSZIP_READY = true;
 }
