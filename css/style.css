@@ -79,10 +79,11 @@ body.reader-page .wrap { flex: 1; min-height: 0; display: flex; flex-direction: 
    mode — an unscoped display:flex here would override [hidden] and leak the
    speed-read controls into the paged reader. */
 body.reader-page.mode-rsvp #rsvpView { overflow: hidden; display: flex;
-  flex-direction: column; flex: 1; min-height: 0; justify-content: center; gap: 6px; }
-/* The reading-pane context strip above the rail keeps its previous size. */
-body.mode-rsvp #pagedView { flex: 0 0 auto; height: 26vh; min-height: 140px;
-  max-height: 26vh; display: flex; flex-direction: column; }
+  flex-direction: column; flex: 1; min-height: 0; justify-content: center; gap: 3px; }
+/* The reading-pane context strip above the rail. Taller so it fits an extra line
+   of text; the space is reclaimed from the rail/toggle/controls below. */
+body.mode-rsvp #pagedView { flex: 0 0 auto; height: 32vh; min-height: 172px;
+  max-height: 34vh; display: flex; flex-direction: column; }
 body.mode-rsvp .page-frame { flex: 1 1 auto; height: auto; min-height: 0; }
 body.mode-rsvp .page-meta { display: none; }
 /* Collapsed reading pane: hide the page strip; rail takes the room. */
@@ -90,7 +91,7 @@ body.mode-rsvp.pane-collapsed #pagedView { display: none; }
 /* Inline pane toggle, only shown in speed-read mode. */
 .pane-toggle { display: none; }
 body.mode-rsvp .pane-toggle {
-  display: block; margin: 6px auto 2px; padding: 4px 14px;
+  display: block; margin: 3px auto 1px; padding: 3px 14px;
   font-family: var(--font-body); font-size: 0.85rem; font-style: italic;
   color: var(--fg-dim); background: transparent; border: 1px solid var(--line);
   border-radius: 999px; cursor: pointer;
@@ -186,13 +187,6 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .card.loading-book:hover { transform: none; box-shadow: none; border-color: var(--line); }
 .tag.loading-tag { color: var(--rubric); border-color: var(--rubric-soft);
   animation: panePulse 1s ease-in-out infinite; }
-/* Briefly flash a just-uploaded book's card after scrolling it into view. */
-.card.just-added { animation: cardFlash 1.8s ease-out 1; }
-@keyframes cardFlash {
-  0%   { box-shadow: 0 0 0 0 var(--rubric); border-color: var(--rubric); }
-  30%  { box-shadow: 0 0 0 3px var(--rubric-soft); border-color: var(--rubric); }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
 .card .del { position: absolute; top: 10px; right: 10px; padding: 1px 8px; font-size: 0.9rem;
   background: transparent; border-color: transparent; color: var(--fg-dim); }
 .card .del:hover { color: var(--bg); background: var(--rubric); border-color: var(--rubric); }
@@ -208,11 +202,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
    screens) so the word box stays a comfortable size and the controls fit below
    without a tall empty box. */
 .rail {
-  position: relative; height: clamp(120px, 18vh, 200px);
+  position: relative; height: clamp(104px, 15vh, 180px);
   flex: 0 0 auto;
   background: var(--bg-2);
   border: 1px solid var(--line); border-radius: var(--radius);
-  margin: 8px 0; display: flex; align-items: center; justify-content: center;
+  margin: 5px 0; display: flex; align-items: center; justify-content: center;
   overflow: hidden;
   box-shadow: inset 0 0 0 6px var(--bg-2), inset 0 0 0 7px var(--line);
 }
@@ -232,9 +226,9 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 /* Controls: a compact grouped block with consistent spacing, never stretched.
    Centered as part of the speed-read group, so rows stay together and the WPM
    slider is always visible. */
-.controls { display: flex; flex-direction: column; gap: 9px; flex: 0 0 auto; }
+.controls { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
 .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
-.transport button { font-size: 1rem; padding: 10px 16px; }
+.transport button { font-size: 1rem; padding: 9px 16px; }
 .scrub input[type=range] { width: 100%; accent-color: var(--rubric); }
 .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .row label { color: var(--fg-dim); font-size: 0.78rem; font-family: var(--font-ui);
@@ -308,12 +302,12 @@ select { font-family: var(--font-body); font-size: 0.98rem; padding: 9px 11px;
      zones cover these gutters PLUS the page's own blank side-padding. */
   padding: 0 clamp(6px, 2vw, 16px); }
 .page {
-  /* The page box always fills the frame. It is NOT flex-sized — flex-basis/grow
-     resolution was letting the box track its content width (a page of only short
-     lines came out narrow). Instead it's a fixed-width block: 100% of the frame,
-     capped at 48rem and centered. flex:none takes it out of flex sizing so its
-     width depends only on the frame, never on what text is on the page. */
-  flex: none; width: 100%; max-width: 48rem; align-self: stretch;
+  /* Always fill the frame: width is the available width (capped at 48rem and
+     centered), height is the full frame. flex-basis is the full width, and
+     flex-shrink:0 means the box NEVER narrows to fit its content — even a page
+     with a single word stays the full page size. min-width:0 only guards the
+     inner text wrapping, not the box width (that's pinned by the basis). */
+  flex: 1 0 100%; width: 100%; max-width: 48rem;
   height: 100%; overflow: hidden; box-sizing: border-box;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
   /* Generous side padding gives a blank band the tap zones can use without ever
