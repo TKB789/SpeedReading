@@ -287,7 +287,7 @@
     return new Promise(function (resolve, reject) {
       var worker;
       try {
-        worker = new Worker(siteBase() + 'js/epub-worker.js?v=1782940000');
+        worker = new Worker(siteBase() + 'js/epub-worker.js?v=1782960000');
       } catch (e) { reject(e); return; }
 
       var meta = { title: null, author: null, count: 0 };

@@ -151,7 +151,16 @@
     var el = this.pageEl;
     var maxH = el.clientHeight;
     var toks = this.tokens;
-    el.innerHTML = '';
+    // Clear only token content; preserve any [data-keep] element (the egg footer)
+    // so it stays inside the page box across renders.
+    (function clearButKeep(node) {
+      var kids = node.childNodes, i = kids.length - 1;
+      for (; i >= 0; i--) {
+        var k = kids[i];
+        if (k.nodeType === 1 && k.getAttribute && k.getAttribute('data-keep')) continue;
+        node.removeChild(k);
+      }
+    })(el);
     var lastPara = -1, curPara = null, lastChapter = -1;
     var pos = fromPos;
     var firstIdx = -1, lastIdx = -1;
