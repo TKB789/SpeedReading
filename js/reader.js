@@ -521,7 +521,9 @@
   // times (walked away) or too-brief flashes are ignored so the number stays real.
   var Wpm = (function () {
     var totalWords = 0, totalMs = 0;
-    var pageWords = 0, pageStart = 0, timing = false;
+    var pageWords = 0, timing = false;
+    var pageActiveMs = 0;   // active (screen-on) ms accumulated for the current page
+    var lastTick = 0;       // wall-clock of the last time we added to pageActiveMs
     var MIN_MS = 800;              // ignore page flips faster than this (skimming past)
     // "Walked away" cutoff is computed PER PAGE from a very slow reading floor, so
     // a genuinely slow or learning reader is never discarded — only true idle time
@@ -534,21 +536,35 @@
     function maxMsFor(words) {
       return Math.max(MIN_CUTOFF_MS, (words / FLOOR_WPM) * 60000 * BUFFER);
     }
-    var hiddenAt = 0;
-
     function now() { return Date.now(); }
+
+    // Fold the time since the last tick into the active total — but ONLY while the
+    // page is visible. This makes the meter immune to the screen dimming/locking:
+    // if the display sleeps, we simply stop accruing time, and a dim can never
+    // inflate a page's duration or trip the walked-away cutoff. Also caps any
+    // single gap so a stray long tick (throttled timer) can't over-count.
+    function accrue() {
+      if (!timing) { lastTick = now(); return; }
+      if (document.visibilityState !== 'visible') { lastTick = now(); return; }
+      var t = now(), dt = t - lastTick;
+      lastTick = t;
+      if (dt > 0 && dt < 30000) pageActiveMs += dt;   // ignore gaps >30s (backgrounded)
+    }
 
     // Begin timing a paged page that has `words` words on it.
     function startPage(words) {
       commit();                    // bank whatever was open before
       pageWords = words || 0;
-      pageStart = now();
+      pageActiveMs = 0;
+      lastTick = now();
       timing = pageWords > 0;
-    }    // Bank the currently-open page's words + elapsed active time into the totals.
+    }
+    // Bank the currently-open page's words + accrued ACTIVE time into the totals.
     function commit() {
-      if (!timing) { pageStart = 0; return; }
-      var dt = now() - pageStart;
-      timing = false; pageStart = 0;
+      accrue();
+      if (!timing) { return; }
+      var dt = pageActiveMs;
+      timing = false;
       if (pageWords <= 0) return;
       if (dt < MIN_MS) return;                 // flashed past — ignore, keep number
       if (dt > maxMsFor(pageWords)) {
@@ -576,14 +592,13 @@
       var v = value();
       el.textContent = (blanked || v == null) ? '-- wpm' : (v.toLocaleString() + ' wpm');
     }
-    // Pause/resume timing with tab visibility so idle background time isn't counted.
-    function onHidden() { if (timing) { hiddenAt = now(); } }
-    function onVisible() {
-      if (timing && hiddenAt) { pageStart += (now() - hiddenAt); hiddenAt = 0; }
-    }
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden) onHidden(); else onVisible();
-    });
+    // Keep the active-time accrual honest across visibility flips. accrue() reads
+    // visibilityState itself, so calling it on change banks the visible span and
+    // resets the tick; hidden time is simply never added.
+    document.addEventListener('visibilitychange', accrue);
+    // A periodic tick so long single-page dwell still accrues (and so the cutoff
+    // check via commit()/render() reflects reality even without a page turn).
+    setInterval(accrue, 5000);
     window.addEventListener('beforeunload', commit);
 
     return { startPage: startPage, commit: commit, addSpeedRead: addSpeedRead, render: render };
