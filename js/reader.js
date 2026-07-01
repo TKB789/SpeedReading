@@ -85,7 +85,11 @@
     if (btn) btn.addEventListener('click', function () { setFontSize(btn.dataset.size); });
   });
 
-  function openMenu() { els.settingsMenu.hidden = false; }
+  function openMenu() {
+    els.settingsMenu.hidden = false;
+    installWpmHistoryPanel();      // idempotent; builds the panel on first open
+    if (typeof Wpm !== 'undefined' && Wpm.renderHistory) Wpm.renderHistory();
+  }
   function closeMenu() { els.settingsMenu.hidden = true; }
   els.settingsBtn.addEventListener('click', function (e) {
     e.stopPropagation();
@@ -97,6 +101,33 @@
   document.getElementById('mTheme').addEventListener('click', function () {
     setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   });
+
+  // Build the WPM history section and append it inside the settings menu, using
+  // the menu's own native classes (.menu-label / .menu-sep) so it inherits the
+  // existing styling. Appended once, on first open.
+  function installWpmHistoryPanel() {
+    var menu = els.settingsMenu;
+    if (!menu || document.getElementById('wpmHistoryPanel')) return;
+    var host = menu.querySelector('.menu') || menu;
+    var panel = document.createElement('div');
+    panel.id = 'wpmHistoryPanel';
+    panel.innerHTML =
+      '<div class="menu-sep"></div>' +
+      '<div class="menu-label" style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span>Reading pace history</span>' +
+        '<button id="wpmHistClear" type="button" class="ghost" ' +
+          'style="font:inherit;cursor:pointer;padding:0;background:none;border:none;' +
+          'color:var(--rubric)">Clear</button>' +
+      '</div>' +
+      '<div id="wpmHistoryList" class="wpm-hist-list" ' +
+        'style="max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>';
+    host.appendChild(panel);
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+    var clearBtn = document.getElementById('wpmHistClear');
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+      if (confirm('Clear the reading-pace history?')) Wpm.clearHistory();
+    });
+  }
 
   Store.requestPersistence();
 
@@ -513,15 +544,15 @@
   var curPageInChapter = null;   // latest page-within-chapter for durable resume
   var _wpmLastPageStart = null;  // first-word index of the last page banked by the meter
 
-  // ---- Session reading-pace meter -------------------------------------------
-  // Cheap, non-competitive: shows words-per-minute for THIS browser session only
-  // (no persistence, resets on reopen). It accumulates total words read and total
-  // ACTIVE time, then reports words/minute. Paged reading contributes a page's
-  // words when you turn away from it; speed-reading contributes its words as they
-  // play. Time only counts while the tab is visible, and absurd per-page dwell
-  // times (walked away) or too-brief flashes are ignored so the number stays real.
+  // ---- Reading-pace meter (per page) ----------------------------------------
+  // Shows the words-per-minute of the LAST fully-read page, for this browser
+  // session only (no persistence, resets on reopen). Each completed page REPLACES
+  // the reading rather than folding into a running average, so a misclick that
+  // flips a page and back doesn't skew the number — the next real page recomputes
+  // it from scratch. Time only counts while the tab is visible; too-brief flips
+  // (misclicks) and absurd dwell times (walked away) are ignored.
   var Wpm = (function () {
-    var totalWords = 0, totalMs = 0;
+    var lastWpm = null;     // wpm of the last completed page (null until first one)
     var pageWords = 0, timing = false;
     var pageActiveMs = 0;   // active (screen-on) ms accumulated for the current page
     var lastTick = 0;       // wall-clock of the last time we added to pageActiveMs
@@ -534,6 +565,34 @@
     // proportionally less. Anything slower than this is treated as away-from-desk.
     var FLOOR_WPM = 60, BUFFER = 1.5, MIN_CUTOFF_MS = 90 * 1000;
     var blanked = false;   // true right after an idle page → show "--" until next page
+
+    // ---- Persistent per-page history (global, all books) --------------------
+    // A capped ring buffer of {t, wpm} entries in localStorage, so the Settings
+    // panel can show a scrolling list of recent page paces across sessions. Cheap:
+    // ~30 bytes/entry, capped at HISTORY_CAP → a few tens of KB at most.
+    var HISTORY_KEY = 'rsvp:wpmHistory';
+    var HISTORY_CAP = 1000;         // keep the most recent N pages; oldest drop off
+    var history = loadHistory();
+    function loadHistory() {
+      try {
+        var v = localStorage.getItem(HISTORY_KEY);
+        var arr = v ? JSON.parse(v) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) { return []; }
+    }
+    function saveHistory() {
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
+      catch (e) { /* quota/private-mode: history is best-effort, ignore */ }
+    }
+    function recordPage(wpm) {
+      history.push({ t: Date.now(), wpm: wpm });
+      if (history.length > HISTORY_CAP) history.splice(0, history.length - HISTORY_CAP);
+      saveHistory();
+      renderHistory();
+    }
+    function getHistory() { return history.slice(); }
+    function clearHistory() { history = []; saveHistory(); renderHistory(); }
+
     function maxMsFor(words) {
       return Math.max(MIN_CUTOFF_MS, (words / FLOOR_WPM) * 60000 * BUFFER);
     }
@@ -560,14 +619,14 @@
       lastTick = now();
       timing = pageWords > 0;
     }
-    // Bank the currently-open page's words + accrued ACTIVE time into the totals.
+    // Compute the just-finished page's pace and make it THE reported number.
     function commit() {
       accrue();
       if (!timing) { return; }
       var dt = pageActiveMs;
       timing = false;
       if (pageWords <= 0) return;
-      if (dt < MIN_MS) return;                 // flashed past — ignore, keep number
+      if (dt < MIN_MS) return;                 // flashed past (misclick) — keep prior number
       if (dt > maxMsFor(pageWords)) {
         // Beyond the slowest-reader threshold → treat as walked-away. Don't count
         // it, and blank the readout to "--" so a stale pace isn't shown; the next
@@ -575,20 +634,49 @@
         blanked = true; render();
         return;
       }
-      totalWords += pageWords; totalMs += dt;
+      lastWpm = Math.round(pageWords / (dt / 60000));
       blanked = false;
+      recordPage(lastWpm);   // persist this page's pace for the Settings history
       render();
     }
     // Speed-read no longer feeds the meter per-tick; pace is page-turn-only.
     function value() {
-      if (totalMs <= 0) return null;
-      return Math.round(totalWords / (totalMs / 60000));
+      return lastWpm;
     }
     function render() {
       var el = document.getElementById('sessionWpm');
       if (!el) return;
       var v = value();
       el.textContent = (blanked || v == null) ? '-- wpm' : (v.toLocaleString() + ' wpm');
+    }
+    // Render the scrolling history list into the Settings panel (if present).
+    // Newest first. Kept lightweight: plain rows of "wpm · relative time".
+    function renderHistory() {
+      var list = document.getElementById('wpmHistoryList');
+      if (!list) return;
+      if (!history.length) {
+        list.innerHTML = '<div class="wpm-hist-empty" style="padding:8px 10px;color:var(--fg-dim);font-style:italic">No pages recorded yet.</div>';
+        return;
+      }
+      var rows = [];
+      for (var i = history.length - 1; i >= 0; i--) {
+        var h = history[i];
+        rows.push('<div class="wpm-hist-row" style="display:flex;justify-content:space-between;' +
+          'padding:6px 10px;border-top:1px solid var(--rule,rgba(128,128,128,.18))">' +
+          '<span style="font-variant-numeric:tabular-nums">' + h.wpm.toLocaleString() + ' wpm</span>' +
+          '<span style="color:var(--fg-dim)">' + relTime(h.t) + '</span></div>');
+      }
+      list.innerHTML = rows.join('');
+    }
+    function relTime(t) {
+      var s = Math.max(0, Math.round((Date.now() - t) / 1000));
+      if (s < 60) return s + 's ago';
+      var m = Math.round(s / 60);
+      if (m < 60) return m + 'm ago';
+      var h = Math.round(m / 60);
+      if (h < 24) return h + 'h ago';
+      var d = Math.round(h / 24);
+      return d + 'd ago';
     }
     // Keep the active-time accrual honest across visibility flips. accrue() reads
     // visibilityState itself, so calling it on change banks the visible span and
@@ -599,7 +687,9 @@
     setInterval(accrue, 5000);
     window.addEventListener('beforeunload', commit);
 
-    return { startPage: startPage, commit: commit, render: render };
+    return { startPage: startPage, commit: commit, render: render,
+             getHistory: getHistory, clearHistory: clearHistory,
+             renderHistory: renderHistory };
   })();
 
   // Tap interaction state: 'idle' (normal) or 'armed' (box outlined, prompt up).
