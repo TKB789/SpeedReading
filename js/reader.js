@@ -426,14 +426,22 @@
       restoreFromCoord(coord);
     }
     // Splice one already-ordered run of tokens at its chapter position.
+    // Inserted in bounded slices: splice.apply passes every token as a function
+    // argument, and JS engines cap argument counts (~65k) — a multi-chapter run
+    // from a large book could exceed that and throw "Maximum call stack size
+    // exceeded". (The array must be mutated in place, not reassigned — engine
+    // and paged hold references to the same array.)
     function spliceRun(run) {
       var firstCh = run[0].chapter;
       var at = tokens.length;
       for (var i = 0; i < tokens.length; i++) {
         if (tokens[i].chapter > firstCh) { at = i; break; }
       }
-      var args = [at, 0].concat(run);
-      Array.prototype.splice.apply(tokens, args);
+      var SLICE = 10000;
+      for (var o = 0; o < run.length; o += SLICE) {
+        var part = run.slice(o, o + SLICE);
+        Array.prototype.splice.apply(tokens, [at + o, 0].concat(part));
+      }
     }
 
     function streamForward() {
@@ -526,6 +534,20 @@
   }
   function updateScrubMax() {
     els.scrub.max = String(Math.max(0, tokens.length - 1));
+  }
+
+  // Single save path for the reading position (debounced saves, lifecycle
+  // events, and the playback autosave all funnel here). Reads the engine state
+  // at CALL time, so a debounced save can't persist a stale snapshot.
+  function persistPosition() {
+    if (!engine) return;
+    var snap = engine.snapshot();
+    var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
+    // Persist the exact page only when the paged view is active; in speed-read
+    // the page isn't the meaningful position, so don't overwrite a good page
+    // with a stale one (saveProgress keeps the previous page when null).
+    var page = (currentView === 'read') ? curPageInChapter : null;
+    Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct, page);
   }
 
   // setup() registers a tokenizer so on-demand chapter loads (chapter jumps to a
@@ -766,7 +788,16 @@
         // and the paged view never remembered where you'd read to. We only sync
         // while the paged view is the active one (not while the rail is driving
         // the page strip in RSVP mode) to avoid fighting the engine.
-        if (currentView === 'read' && engine && info && info.startIndex != null) {
+        //
+        // didInitialPaint guard: during startup the paged view builds and renders
+        // BEFORE switchView() applies the resume mode, so currentView is still the
+        // default 'read' even when resuming into speed-read. Without the guard,
+        // that first programmatic render overwrote engine.index (the exact
+        // resumed word) with the page's first word — and the debounced save then
+        // persisted the wrong spot, which is why speed-read resume kept losing
+        // its place. Only user-driven page changes after the initial paint may
+        // move the engine.
+        if (didInitialPaint && currentView === 'read' && engine && info && info.startIndex != null) {
           engine.index = info.startIndex;
           onState(engine.snapshot());   // debounced-saves the new coordinate + page
         }
@@ -795,7 +826,14 @@
         var hint = (engine ? engine.index : 0);
         restored = paged.goToChapterPage(resumeChapterNum, resumePageInChapter, hint);
       }
-      if (!restored) paged.goToIndex(engine ? engine.index : 0);
+      if (!restored) {
+        paged.goToIndex(engine ? engine.index : 0);
+      } else if (engine && paged.firstIndex != null) {
+        // Exact-page restore succeeded (read mode only): the page is the
+        // position of record there, so align the engine to it once, explicitly.
+        // (The onPageChange sync is suppressed until didInitialPaint.)
+        engine.index = paged.firstIndex;
+      }
       didInitialPaint = true;
     });
 
@@ -1180,7 +1218,17 @@
     if (currentView === 'rsvp' && paged) {
       paged.follow(snap ? snap.index : engine.index);
     }
+    // Durable autosave during playback (throttled). The debounced onState save
+    // only fires on play/pause/seek, and pagehide/visibilitychange don't fire
+    // when a mobile tab is killed in the background — without this, a long
+    // uninterrupted speed-read session could resume at its START. Saving every
+    // few seconds keeps the resume point within a couple of words of reality.
+    if (snap && snap.playing) {
+      var nowMs = Date.now();
+      if (nowMs - _lastLiveSave > 3000) { _lastLiveSave = nowMs; persistPosition(); }
+    }
   }
+  var _lastLiveSave = 0;
 
   // Pin the pivot letter's centre to the rail's centre. .word's left edge sits at
   // 50%; shift left by pre-width + half the pivot width, and up by half the word
@@ -1262,14 +1310,7 @@
     // Debounced progress save — stored as a CONTENT COORDINATE so it resolves on
     // reopen without needing the whole book tokenized first.
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
-      // Persist the exact page only when the paged view is active; in speed-read
-      // the page isn't the meaningful position, so don't overwrite a good page
-      // with a stale one (saveProgress keeps the previous page when null).
-      var page = (currentView === 'read') ? curPageInChapter : null;
-      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct, page);
-    }, 400);
+    saveTimer = setTimeout(persistPosition, 400);
   }
 
   function wireControls() {
@@ -1322,17 +1363,10 @@
       else if (e.code === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? engine.skipTime(-30000) : engine.step(-1); }
     });
 
-    function saveNow() {
-      if (!engine) return;
-      var snap = engine.snapshot();
-      var pct = fullyLoaded && snap.total ? Math.round(snap.index / snap.total * 100) : null;
-      var page = (currentView === 'read') ? curPageInChapter : null;
-      Store.saveProgress(bookId, currentCoord(), snap.chapter, currentView, pct, page);
-    }
-    window.addEventListener('beforeunload', saveNow);
-    window.addEventListener('pagehide', saveNow);
+    window.addEventListener('beforeunload', persistPosition);
+    window.addEventListener('pagehide', persistPosition);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') saveNow();
+      if (document.visibilityState === 'hidden') persistPosition();
     });
   }
 

@@ -144,60 +144,110 @@
   };
 
 
-  // measureOnly, we still render (to measure) but the caller will re-render the
-  // chosen page for display via _renderPage. Returns the token position one past
-  // the last word that fit. Renders a chapter heading at the chapter's first token.
+  // Fill one page starting at fromPos, up to (excl.) limit. Renders into the
+  // page box and returns the token position one past the last word that fit.
+  // Renders a chapter heading at the chapter's first token. (measureOnly is
+  // kept for API compatibility; the render is identical either way, as before.)
+  //
+  // PERFORMANCE: the previous version read el.scrollHeight after appending
+  // EVERY word — a forced synchronous reflow per word, i.e. ~300 layout passes
+  // per page and thousands per chapter pagination. That was the main source of
+  // page-turn / pagination lag. This version appends words in growing batches
+  // (one reflow per batch) and then binary-searches the exact cutoff (one
+  // reflow per probe): ~10–15 reflows per page. The fit test is unchanged
+  // (scrollHeight vs clientHeight), so page boundaries are identical to before.
   Paged.prototype._fillPage = function (fromPos, limit, measureOnly) {
     var el = this.pageEl;
     var maxH = el.clientHeight;
     var toks = this.tokens;
     el.innerHTML = '';
-    var lastPara = -1, curPara = null, lastChapter = -1;
+    if (fromPos >= limit) return fromPos;
+
+    // ---- Phase 1: append in growing batches until overflow (or limit) ----
+    var entries = [];               // {span, nextPos} per display word, in order
+    var paraEls = [];               // {el, firstEntry} per paragraph created
+    var lastPara = -1, lastChapter = -1, curPara = null;
     var pos = fromPos;
-    var firstIdx = -1, lastIdx = -1;
+    var batch = Math.max(32, this._lastPageWords || 200); // seed from last page
+    var overflow = false;
+
     while (pos < limit) {
-      var dw = this._wordAt(pos);
-      if (!dw) break;
-      var w = dw.word;
-      if (w.chapter !== lastChapter) {
-        var isChapterFirstToken = (pos === 0) ||
-          (toks[pos - 1] && toks[pos - 1].chapter !== w.chapter);
-        if (isChapterFirstToken && this._chapterTitles &&
-            this._chapterTitles[w.chapter] != null) {
-          var hd = document.createElement('div');
-          hd.className = 'pg-chapter-title';
-          hd.textContent = this._chapterTitles[w.chapter];
-          el.appendChild(hd);
-          if (el.scrollHeight > maxH && firstIdx >= 0) { el.removeChild(hd); break; }
+      var target = entries.length + batch;
+      while (pos < limit && entries.length < target) {
+        var dw = this._wordAt(pos);
+        if (!dw) { pos = limit; break; }
+        var w = dw.word;
+        if (w.chapter !== lastChapter) {
+          var isChapterFirstToken = (pos === 0) ||
+            (toks[pos - 1] && toks[pos - 1].chapter !== w.chapter);
+          if (isChapterFirstToken && this._chapterTitles &&
+              this._chapterTitles[w.chapter] != null) {
+            var hd = document.createElement('div');
+            hd.className = 'pg-chapter-title';
+            hd.textContent = this._chapterTitles[w.chapter];
+            el.appendChild(hd);
+          }
+          lastChapter = w.chapter;
+          lastPara = -1;
         }
-        lastChapter = w.chapter;
-        lastPara = -1;
+        if (w.para !== lastPara) {
+          curPara = document.createElement('p');
+          curPara.className = 'pg-para';
+          el.appendChild(curPara);
+          paraEls.push({ el: curPara, firstEntry: entries.length });
+          lastPara = w.para;
+        }
+        var span = document.createElement('span');
+        span.className = 'pg-word';
+        span.textContent = w.text + ' ';
+        span.dataset.index = w.index;
+        curPara.appendChild(span);
+        entries.push({ span: span, nextPos: dw.nextPos });
+        pos = dw.nextPos;
       }
-      if (w.para !== lastPara) {
-        curPara = document.createElement('p');
-        curPara.className = 'pg-para';
-        el.appendChild(curPara);
-        lastPara = w.para;
-      }
-      var span = document.createElement('span');
-      span.className = 'pg-word';
-      span.textContent = w.text + ' ';
-      span.dataset.index = w.index;
-      curPara.appendChild(span);
-      if (el.scrollHeight > maxH) {
-        curPara.removeChild(span);
-        if (!curPara.childNodes.length) el.removeChild(curPara);
-        break;
-      }
-      if (firstIdx < 0) firstIdx = w.index;
-      lastIdx = w.index;
-      pos = dw.nextPos;
+      if (el.scrollHeight > maxH) { overflow = true; break; } // 1 reflow / batch
+      batch *= 2;
     }
-    if (pos === fromPos && fromPos < limit) {
-      var one = this._wordAt(fromPos);
-      pos = one ? one.nextPos : fromPos + 1;
+
+    if (!entries.length) return Math.min(limit, fromPos + 1); // guarantee progress
+
+    var fit = entries.length;
+    if (overflow) {
+      // ---- Phase 2: binary-search the largest word count that fits --------
+      // showFirst(k) displays exactly the first k words (and hides paragraphs
+      // that would be empty, matching the old "remove empty <p>" behaviour so
+      // stray paragraph margins can't skew the measurement).
+      var showFirst = function (k) {
+        for (var i = 0; i < entries.length; i++) {
+          entries[i].span.style.display = (i < k) ? '' : 'none';
+        }
+        for (var p = 0; p < paraEls.length; p++) {
+          paraEls[p].el.style.display = (paraEls[p].firstEntry < k) ? '' : 'none';
+        }
+      };
+      var best = 1, lo = 1, hi = entries.length - 1;
+      while (lo <= hi) {
+        var mid = (lo + hi) >> 1;
+        showFirst(mid);
+        if (el.scrollHeight <= maxH) { best = mid; lo = mid + 1; } // 1 reflow / probe
+        else { hi = mid - 1; }
+      }
+      fit = best;
+      // ---- Finalize: really remove what didn't fit (clean DOM for taps) ----
+      for (var r = entries.length - 1; r >= fit; r--) {
+        var sp = entries[r].span;
+        if (sp.parentNode) sp.parentNode.removeChild(sp);
+      }
+      for (var q = paraEls.length - 1; q >= 0; q--) {
+        var pe = paraEls[q];
+        pe.el.style.display = '';
+        if (!pe.el.childNodes.length && pe.el.parentNode) pe.el.parentNode.removeChild(pe.el);
+      }
+      for (var v = 0; v < fit; v++) entries[v].span.style.display = '';
     }
-    return pos;
+
+    this._lastPageWords = fit;      // seed the next page's first batch size
+    return entries[fit - 1].nextPos;
   };
 
   // Render a specific page (by its index in this._pages) for display, marking the
@@ -281,10 +331,19 @@
     function step() {
       if (self._totalsCanceled) return;
       var sliceEnd = Math.min(numChapters, ch + 3); // a few chapters per slice
+      var measured = false;
       for (; ch < sliceEnd; ch++) {
         if (self._pageCounts[ch] == null) {
-          self._pageCounts[ch] = self._countChapterPages(ch, firstPos[ch]);
+          self._pageCounts[ch] = self._countChapterPages(ch, firstPos[ch], /*skipRestore=*/true);
+          measured = true;
         }
+      }
+      // The count pass renders into the live box to measure; restore the page
+      // the reader is on ONCE per slice (not once per chapter — that tripled
+      // the background layout work and contributed to page-turn jank).
+      if (measured && self._pages.length && self._pages[self._pageIdx]) {
+        self._fillPage(self._pages[self._pageIdx].startPos,
+                       self._pages[self._pageIdx].endPos, false);
       }
       if (onProgress) onProgress(self._totalsReady(numChapters), self.totalPages(numChapters));
       if (ch < numChapters) {
@@ -301,7 +360,7 @@
   // Paginate one chapter only to COUNT its pages, then restore the visible page
   // so the view is untouched. `hintPos` is the chapter's first token position (if
   // known) for fast bounds. Uses the same _fillPage measurement as display.
-  Paged.prototype._countChapterPages = function (chapter, hintPos) {
+  Paged.prototype._countChapterPages = function (chapter, hintPos, skipRestore) {
     var maxH = this.pageEl.clientHeight;
     if (!maxH || maxH < 40) return 1;
     var b = this._chapterBounds(chapter, hintPos);
@@ -313,9 +372,12 @@
       if (pos <= pageStart) pos = pageStart + 1;
       count++;
     }
-    // Restore the page the reader is actually on (we just clobbered the box).
-    if (this._pages.length) this._fillPage(this._pages[this._pageIdx].startPos,
-                                           this._pages[this._pageIdx].endPos, false);
+    // Restore the page the reader is actually on (we just clobbered the box) —
+    // unless the caller batches counts and restores once per slice itself.
+    if (!skipRestore && this._pages.length && this._pages[this._pageIdx]) {
+      this._fillPage(this._pages[this._pageIdx].startPos,
+                     this._pages[this._pageIdx].endPos, false);
+    }
     return count || 1;
   };
 

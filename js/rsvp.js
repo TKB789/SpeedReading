@@ -121,10 +121,36 @@
   };
   // Estimate ms of reading remaining from current index to end (ignores future
   // WPM changes; good enough for a live readout).
+  //
+  // O(1) per call via cached prefix sums. The naive loop was O(remaining tokens)
+  // and ran on EVERY state update — every page turn, seek, and pause scanned the
+  // whole book (hundreds of thousands of delayFor calls), a real contributor to
+  // page-turn lag. delayFor decomposes as
+  //   base * (1 + (hold-1)*ps) + base * (struct-1) * ps      (struct-1 = 0 mid-para)
+  // so the sum over [i, N) is
+  //   base * ( (N-i) + ps * (ΣholdExtra + ΣstructExtra) )
+  // with the Σ terms answered from prefix arrays. wpm/pauseScale sit outside the
+  // sums, so changing them never invalidates the cache; only token inserts do
+  // (they always change tokens.length, which is the cache key).
+  Engine.prototype._ensureSums = function () {
+    var n = this.tokens.length;
+    if (this._sumLen === n) return;
+    var H = new Float64Array(n + 1);   // cumulative (hold - 1)
+    var S = new Float64Array(n + 1);   // cumulative (struct - 1)
+    for (var i = 0; i < n; i++) {
+      var t = this.tokens[i];
+      H[i + 1] = H[i] + (t.hold - 1);
+      var struct = t.chapterEnd ? this.chapterPause : (t.paraEnd ? this.paraPause : 1);
+      S[i + 1] = S[i] + (struct - 1);
+    }
+    this._H = H; this._S = S; this._sumLen = n;
+  };
   Engine.prototype.timeLeftMs = function () {
-    var ms = 0;
-    for (var i = this.index; i < this.tokens.length; i++) ms += this.delayFor(this.tokens[i]);
-    return ms;
+    this._ensureSums();
+    var n = this.tokens.length;
+    var i = Math.max(0, Math.min(n, this.index));
+    return this.baseDelay() * ((n - i) +
+      this.pauseScale * ((this._H[n] - this._H[i]) + (this._S[n] - this._S[i])));
   };
   // Skip by a duration in ms: walk forward/back accumulating per-word delays.
   Engine.prototype.skipTime = function (ms) {
